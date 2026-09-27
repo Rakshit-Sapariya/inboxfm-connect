@@ -14,13 +14,13 @@ export default function LoginPage() {
   const { signIn } = useAuth()
 
   const navigateAfterLogin = () => {
-    const from = (location.state as { from?: { pathname?: string; search?: string } } | undefined)?.from
     const searchParams = new URLSearchParams(location.search)
     const returnUrlParam = searchParams.get('returnUrl')
 
-    const targetUrl = from
-      ? `${from.pathname ?? '/'}${from.search ?? ''}`
-      : returnUrlParam || '/'
+    const targetUrl =
+      returnUrlParam && returnUrlParam.startsWith('/') && !returnUrlParam.startsWith('//')
+        ? returnUrlParam
+        : '/'
 
     navigate(targetUrl, { replace: true })
   }

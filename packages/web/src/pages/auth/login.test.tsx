@@ -16,22 +16,22 @@ vi.mock('@/lib/auth/auth-context', () => ({
   }),
 }))
 
-describe('LoginPage return URL handling (#173)', () => {
+describe('LoginPage navigation handling (#173)', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     mockSignIn.mockClear()
   })
 
-  it('redirects to return URL specified in router location state upon successful sign-in', async () => {
+  it('redirects to index route (/) upon successful sign-in by default', async () => {
     function Destinations() {
       return (
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
-            path="/automations/triggers"
+            path="/"
             element={
               <div>
-                <h1>Triggers Page</h1>
+                <h1>Dashboard Page</h1>
               </div>
             }
           />
@@ -49,14 +49,7 @@ describe('LoginPage return URL handling (#173)', () => {
     })
 
     const container = mount(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: '/login',
-            state: { from: { pathname: '/automations/triggers' } },
-          },
-        ]}
-      >
+      <MemoryRouter initialEntries={['/login']}>
         <Destinations />
       </MemoryRouter>
     )
@@ -70,12 +63,12 @@ describe('LoginPage return URL handling (#173)', () => {
       devButton?.click()
     })
 
-    await waitFor(() => container.textContent?.includes('Triggers Page') === true)
-    expect(container.textContent).toContain('Triggers Page')
+    await waitFor(() => container.textContent?.includes('Dashboard Page') === true)
+    expect(container.textContent).toContain('Dashboard Page')
     expect(mockSignIn).toHaveBeenCalledWith('jwt_123', expect.any(Object), 'prj_123')
   })
 
-  it('redirects to returnUrl search parameter if router state.from is not provided', async () => {
+  it('redirects to returnUrl search parameter if provided in query string', async () => {
     function Destinations() {
       return (
         <Routes>
