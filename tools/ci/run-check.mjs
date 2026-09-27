@@ -12,8 +12,9 @@ switch (suite) {
         execFileSync('npm', ['run', 'pack:verify', '--workspace=@inboxfm-connect/sdk'], { stdio: 'inherit' })
         break
     case 'unit':
-        turbo('test', '--concurrency=2', '--filter=@inboxfm-connect/shared', '--filter=@inboxfm-connect/core-execution', '--filter=@inboxfm-connect/sdk', '--filter=@inboxfm-connect/web', '--filter=@inboxfm-connect/scheduler')
+        turbo('test', '--concurrency=2', '--filter=@inboxfm-connect/shared', '--filter=@inboxfm-connect/core-execution', '--filter=@inboxfm-connect/sdk', '--filter=@inboxfm-connect/web', '--filter=@inboxfm-connect/scheduler', '--filter=@inboxfm-connect/cli')
         turbo('test-unit', '--filter=api', '--filter=@inboxfm-connect/engine')
+        execFileSync('bun', ['x', 'vitest', 'run', 'tools/setup-dev.test.ts'], { stdio: 'inherit' })
         break
     case 'engine-integration':
         execFileSync(process.execPath, ['-e', "require('isolated-vm')"], { cwd: 'packages/server/engine', stdio: 'inherit' })

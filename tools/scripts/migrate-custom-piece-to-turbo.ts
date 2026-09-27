@@ -14,7 +14,7 @@
  * Usage:
  *   npx ts-node tools/scripts/migrate-custom-piece-to-turbo.ts [piece-path]
  *
- * If no path is provided, it scans packages/pieces/custom/ for all pieces.
+ * If no path is provided, it scans packages/integrations/custom/ for all pieces.
  */
 
 import * as fs from 'fs';
