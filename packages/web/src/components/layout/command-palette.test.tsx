@@ -7,6 +7,9 @@ import { createTestQueryClient, mount, waitFor } from '@/test/test-utils'
 import { stubApi, StubRoute } from '@/test/api-stub'
 import { automationConnection, githubTriggerBinding, slackScheduledTask } from '@/test/fixtures/automations'
 import { recordedExecution, executionsPage } from '@/test/fixtures/executions'
+import { apiClient } from '@/lib/api/client'
+
+const TEST_PROJECT_ID = 'proj_palette_scoped'
 
 function LocationProbe() {
   const location = useLocation()
@@ -93,7 +96,7 @@ async function typeIntoPalette(value: string): Promise<void> {
 
 describe('CommandPalette', () => {
   beforeEach(() => {
-    localStorage.clear()
+    apiClient.setProjectId(TEST_PROJECT_ID)
     document.body.innerHTML = ''
   })
 
@@ -281,5 +284,169 @@ describe('CommandPalette', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(document.querySelector('[data-testid="pathname"]')?.textContent).toBe('/')
+  })
+
+  it('follows SeekPage.next pagination to load subsequent pages of connections', async () => {
+    const multiPageRoutes: StubRoute[] = [
+      {
+        match: (url) =>
+          url.pathname === '/api/v1/connections' && !url.searchParams.has('cursor'),
+        respond: () => ({
+          status: 200,
+          body: {
+            data: [automationConnection({ id: 'conn_1', displayName: 'Connection Page 1' })],
+            next: 'cursor_page_2',
+            previous: null,
+          },
+        }),
+      },
+      {
+        match: (url) =>
+          url.pathname === '/api/v1/connections' &&
+          url.searchParams.get('cursor') === 'cursor_page_2',
+        respond: () => ({
+          status: 200,
+          body: {
+            data: [automationConnection({ id: 'conn_2', displayName: 'Connection Page 2' })],
+            next: null,
+            previous: null,
+          },
+        }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/trigger-bindings',
+        respond: () => ({ status: 200, body: { data: [] } }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/scheduled-tasks',
+        respond: () => ({ status: 200, body: { data: [] } }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/executions',
+        respond: () => ({ status: 200, body: executionsPage([]) }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/integrations',
+        respond: () => ({ status: 200, body: { data: [] } }),
+      },
+    ]
+
+    renderPalette(true, vi.fn(), multiPageRoutes)
+
+    await waitFor(() => document.body.textContent?.includes('Connection Page 1') === true)
+    await waitFor(() => document.body.textContent?.includes('Connection Page 2') === true)
+
+    expect(document.body.textContent).toContain('Connection Page 1')
+    expect(document.body.textContent).toContain('Connection Page 2')
+  })
+
+  it('degrades gracefully when resource queries fail (500)', async () => {
+    const onOpenChange = vi.fn()
+    const errorRoutes: StubRoute[] = [
+      {
+        match: (url) => url.pathname === '/api/v1/connections',
+        respond: () => ({ status: 500, body: { message: 'Internal Server Error' } }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/trigger-bindings',
+        respond: () => ({ status: 500, body: { message: 'Internal Server Error' } }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/scheduled-tasks',
+        respond: () => ({ status: 500, body: { message: 'Internal Server Error' } }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/executions',
+        respond: () => ({ status: 500, body: { message: 'Internal Server Error' } }),
+      },
+      {
+        match: (url) => url.pathname === '/api/v1/integrations',
+        respond: () => ({ status: 500, body: { message: 'Internal Server Error' } }),
+      },
+    ]
+
+    renderPalette(true, onOpenChange, errorRoutes)
+
+    await waitFor(() => document.querySelector('[cmdk-root]') !== null)
+
+    // Palette stays open, no crash
+    expect(document.querySelector('[cmdk-root]')).not.toBeNull()
+
+    // Resource groups are hidden
+    expect(document.body.textContent).not.toContain('Mihir GitHub')
+    expect(document.body.textContent).not.toContain('newIssue')
+
+    // Navigation group items remain visible and selectable
+    const labels = ['Overview Dashboard', 'Integrations Catalog', 'Connections & Credentials']
+    labels.forEach((label) => {
+      expect(document.body.textContent).toContain(label)
+    })
+
+    // Navigation works even when resource endpoints fail
+    const items = Array.from(document.querySelectorAll<HTMLElement>('[cmdk-item]'))
+    const overviewItem = items.find((item) => item.textContent?.includes('Overview Dashboard'))
+    expect(overviewItem).toBeDefined()
+
+    await act(async () => {
+      overviewItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(document.querySelector('[data-testid="pathname"]')?.textContent).toBe('/')
+  })
+
+  it('asserts resource queries include projectId parameter for multi-tenant isolation', async () => {
+    const api = stubApi(defaultRoutes())
+    const queryClient = createTestQueryClient()
+    mount(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/']}>
+          <CommandPalette open={true} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => document.body.textContent?.includes('Mihir GitHub') === true)
+
+    const resourceEndpoints = [
+      '/api/v1/connections',
+      '/api/v1/trigger-bindings',
+      '/api/v1/scheduled-tasks',
+      '/api/v1/executions',
+    ]
+
+    for (const endpoint of resourceEndpoints) {
+      const recorded = api.requests.find((r) => r.url.includes(endpoint))
+      expect(recorded).toBeDefined()
+      const url = new URL(recorded!.url, 'http://localhost')
+      expect(url.searchParams.get('projectId')).toBe(TEST_PROJECT_ID)
+    }
+  })
+
+  it('supports keyboard navigation traversal via ArrowDown and Enter key', async () => {
+    const onOpenChange = vi.fn()
+    renderPalette(true, onOpenChange)
+
+    await waitFor(() => document.body.textContent?.includes('Overview Dashboard') === true)
+
+    const input = document.querySelector<HTMLInputElement>('input[cmdk-input]')
+    expect(input).not.toBeNull()
+
+    // Press ArrowDown to change focus
+    await act(async () => {
+      input!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true, cancelable: true })
+      )
+    })
+
+    // Press Enter to select
+    await act(async () => {
+      input!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })
+      )
+    })
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(document.querySelector('[data-testid="pathname"]')?.textContent).toBeTruthy()
   })
 })

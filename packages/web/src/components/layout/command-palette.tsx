@@ -6,6 +6,7 @@ import {
   Code2,
   KeyRound,
   LayoutGrid,
+  Loader2,
   Radio,
   Settings,
   Zap,
@@ -19,14 +20,15 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandLoading,
   CommandSeparator,
 } from '@/components/ui/command'
 import {
-  useConnectionsQuery,
+  useConnectionsInfiniteQuery,
   useExecutionsQuery,
   useIntegrations,
-  useScheduledTasksQuery,
-  useTriggerBindingsQuery,
+  useScheduledTasksInfiniteQuery,
+  useTriggerBindingsInfiniteQuery,
 } from '@/lib/query/hooks'
 
 export interface CommandPaletteProps {
@@ -37,30 +39,96 @@ export interface CommandPaletteProps {
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate()
 
-  const { data: connectionsData } = useConnectionsQuery(
+  const {
+    data: connectionsPages,
+    hasNextPage: hasNextConnections,
+    isFetchingNextPage: isFetchingNextConnections,
+    fetchNextPage: fetchNextConnections,
+    isLoading: isLoadingConnections,
+  } = useConnectionsInfiniteQuery(
     { limit: 100 },
     { enabled: open, showErrorToast: false }
   )
-  const { data: triggerBindings } = useTriggerBindingsQuery({
+
+  const {
+    data: triggerBindingsPages,
+    hasNextPage: hasNextTriggers,
+    isFetchingNextPage: isFetchingNextTriggers,
+    fetchNextPage: fetchNextTriggers,
+    isLoading: isLoadingTriggers,
+  } = useTriggerBindingsInfiniteQuery({
     enabled: open,
     showErrorToast: false,
   })
-  const { data: scheduledTasks } = useScheduledTasksQuery({
+
+  const {
+    data: scheduledTasksPages,
+    hasNextPage: hasNextSchedules,
+    isFetchingNextPage: isFetchingNextSchedules,
+    fetchNextPage: fetchNextSchedules,
+    isLoading: isLoadingSchedules,
+  } = useScheduledTasksInfiniteQuery({
     enabled: open,
     showErrorToast: false,
   })
-  const { data: executionsData } = useExecutionsQuery(
-    { limit: 20 },
+
+  const {
+    data: executionsData,
+    isLoading: isLoadingExecutions,
+  } = useExecutionsQuery(
+    { limit: 50 },
     { enabled: open, showErrorToast: false }
   )
-  const { data: integrationsData } = useIntegrations(
+
+  const {
+    data: integrationsData,
+    isLoading: isLoadingIntegrations,
+  } = useIntegrations(
     undefined,
-    { enabled: open }
+    { enabled: open, showErrorToast: false }
   )
 
-  const connections = connectionsData?.data
+  // Follow SeekPage.next for all paginated resources while the palette is open
+  React.useEffect(() => {
+    if (open && hasNextConnections && !isFetchingNextConnections) {
+      void fetchNextConnections()
+    }
+  }, [open, hasNextConnections, isFetchingNextConnections, fetchNextConnections])
+
+  React.useEffect(() => {
+    if (open && hasNextTriggers && !isFetchingNextTriggers) {
+      void fetchNextTriggers()
+    }
+  }, [open, hasNextTriggers, isFetchingNextTriggers, fetchNextTriggers])
+
+  React.useEffect(() => {
+    if (open && hasNextSchedules && !isFetchingNextSchedules) {
+      void fetchNextSchedules()
+    }
+  }, [open, hasNextSchedules, isFetchingNextSchedules, fetchNextSchedules])
+
+  const connections = React.useMemo(
+    () => connectionsPages?.pages.flatMap((page) => page.data) ?? [],
+    [connectionsPages]
+  )
+  const triggerBindings = React.useMemo(
+    () => triggerBindingsPages?.pages.flatMap((page) => page.data) ?? [],
+    [triggerBindingsPages]
+  )
+  const scheduledTasks = React.useMemo(
+    () => scheduledTasksPages?.pages.flatMap((page) => page.data) ?? [],
+    [scheduledTasksPages]
+  )
   const executions = executionsData?.data
   const integrations = integrationsData?.data
+
+  const isInitialLoading =
+    open &&
+    (isLoadingConnections ||
+      isLoadingTriggers ||
+      isLoadingSchedules ||
+      isLoadingExecutions ||
+      isLoadingIntegrations)
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -85,6 +153,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput placeholder="Search resources, integrations, routes..." />
       <CommandList>
+        {isInitialLoading && (
+          <CommandLoading>
+            <div className="flex items-center justify-center gap-2 py-1 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Loading resources...</span>
+            </div>
+          </CommandLoading>
+        )}
         <CommandEmpty>No results found.</CommandEmpty>
 
         {connections && connections.length > 0 && (
