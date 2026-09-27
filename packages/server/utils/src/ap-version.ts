@@ -2,6 +2,7 @@ import { isNil } from '@inboxfm-connect/core-utils';
 import fs from 'fs'
 import path from 'path'
 import { apLogger } from './ap-logger'
+import { safeHttp } from './safe-http'
 
 const logger = apLogger.create()
 
@@ -35,13 +36,12 @@ export const apVersionUtil = {
     },
     async getLatestRelease(): Promise<string> {
         try {
-            const response = await fetch(
+            const { data } = await safeHttp.axios.get<PackageJson>(
                 'https://raw.githubusercontent.com/activepieces/activepieces/main/package.json',
                 {
-                    signal: AbortSignal.timeout(5000),
+                    timeout: 5000,
                 },
             )
-            const data = await response.json() as PackageJson
             return data.version
         }
         catch (ex) {

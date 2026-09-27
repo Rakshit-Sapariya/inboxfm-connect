@@ -1,5 +1,7 @@
 import { ActivepiecesError, ErrorCode, isNil } from '@inboxfm-connect/core-utils'
+import { safeHttp } from '@inboxfm-connect/server-utils'
 import { ApEdition, CreateTrialLicenseKeyRequestBody, LicenseKeyEntity, PlanName, TeamProjectsLimit, TelemetryEventName } from '@inboxfm-connect/shared'
+import { isAxiosError } from 'axios'
 import dayjs from 'dayjs'
 import { FastifyBaseLogger } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
@@ -19,45 +21,29 @@ const handleUnexpectedSecretsManagerError = (log: FastifyBaseLogger, message: st
 
 export const licenseKeysService = (log: FastifyBaseLogger) => ({
     async requestTrial(request: CreateTrialLicenseKeyRequestBody): Promise<LicenseKeyEntity> {
-        const response = await fetch(secretManagerLicenseKeysRoute, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(request),
-        })
-        if (response.status === StatusCodes.CONFLICT) {
-            throw new ActivepiecesError({
-                code: ErrorCode.EMAIL_ALREADY_HAS_ACTIVATION_KEY,
-                params: request,
-            })
+        try {
+            const { data } = await safeHttp.axios.post<LicenseKeyEntity>(secretManagerLicenseKeysRoute, request)
+            return data
         }
-        if (!response.ok) {
-            const errorMessage = JSON.stringify(await response.json())
-            handleUnexpectedSecretsManagerError(log, errorMessage)
+        catch (err) {
+            if (isAxiosError(err) && err.response?.status === StatusCodes.CONFLICT) {
+                throw new ActivepiecesError({
+                    code: ErrorCode.EMAIL_ALREADY_HAS_ACTIVATION_KEY,
+                    params: request,
+                })
+            }
+            if (isAxiosError(err) && err.response?.data) {
+                const errorMessage = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)
+                handleUnexpectedSecretsManagerError(log, errorMessage)
+            }
+            throw err
         }
-        const responseBody = await response.json()
-        return responseBody
     },
     async markAsActiviated(request: { key: string, platformId?: string }): Promise<void> {
         try {
-            const response = await fetch(`${secretManagerLicenseKeysRoute}/activate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(request),
+            await safeHttp.axios.post(`${secretManagerLicenseKeysRoute}/activate`, request, {
+                validateStatus: (status) => status === StatusCodes.OK || status === StatusCodes.CONFLICT || status === StatusCodes.NOT_FOUND,
             })
-            if (response.status === StatusCodes.CONFLICT) {
-                return
-            }
-            if (response.status === StatusCodes.NOT_FOUND) {
-                return
-            }
-            if (!response.ok) {
-                const errorMessage = JSON.stringify(await response.json())
-                handleUnexpectedSecretsManagerError(log, errorMessage)
-            }
             if (request.platformId) {
                 rejectedPromiseHandler(telemetry(log).trackPlatform(request.platformId, {
                     name: TelemetryEventName.KEY_ACTIVATED,
@@ -76,15 +62,20 @@ export const licenseKeysService = (log: FastifyBaseLogger) => ({
         if (isNil(license)) {
             return null
         }
-        const response = await fetch(`${secretManagerLicenseKeysRoute}/${license}`)
-        if (response.status === StatusCodes.NOT_FOUND) {
-            return null
+        try {
+            const { data } = await safeHttp.axios.get<LicenseKeyEntity>(`${secretManagerLicenseKeysRoute}/${license}`)
+            return data
         }
-        if (!response.ok) {
-            const errorMessage = JSON.stringify(await response.json())
-            handleUnexpectedSecretsManagerError(log, errorMessage)
+        catch (err) {
+            if (isAxiosError(err) && err.response?.status === StatusCodes.NOT_FOUND) {
+                return null
+            }
+            if (isAxiosError(err) && err.response?.data) {
+                const errorMessage = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)
+                handleUnexpectedSecretsManagerError(log, errorMessage)
+            }
+            throw err
         }
-        return response.json()
     },
     async verifyKeyOrReturnNull({ platformId, license }: { license: string | undefined, platformId: string }): Promise<LicenseKeyEntity | null> {
         if (isNil(license)) {
@@ -97,27 +88,27 @@ export const licenseKeysService = (log: FastifyBaseLogger) => ({
     },
     async extendTrial({ email, days }: { email: string, days: number }): Promise<void> {
         const SECRET_MANAGER_API_KEY = system.getOrThrow(AppSystemProp.SECRET_MANAGER_API_KEY)
-        const response = await fetch(`${secretManagerLicenseKeysRoute}/extend-trial`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'api-key': SECRET_MANAGER_API_KEY,
-            },
-            body: JSON.stringify({ email, days }),
-        })
-
-        if (response.status === StatusCodes.NOT_FOUND) {
-            throw new ActivepiecesError({
-                code: ErrorCode.ENTITY_NOT_FOUND,
-                params: {
-                    message: 'License key not found',
+        try {
+            await safeHttp.axios.post(`${secretManagerLicenseKeysRoute}/extend-trial`, { email, days }, {
+                headers: {
+                    'api-key': SECRET_MANAGER_API_KEY,
                 },
             })
         }
-
-        if (!response.ok) {
-            const errorMessage = JSON.stringify(await response.json())
-            handleUnexpectedSecretsManagerError(log, errorMessage)
+        catch (err) {
+            if (isAxiosError(err) && err.response?.status === StatusCodes.NOT_FOUND) {
+                throw new ActivepiecesError({
+                    code: ErrorCode.ENTITY_NOT_FOUND,
+                    params: {
+                        message: 'License key not found',
+                    },
+                })
+            }
+            if (isAxiosError(err) && err.response?.data) {
+                const errorMessage = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)
+                handleUnexpectedSecretsManagerError(log, errorMessage)
+            }
+            throw err
         }
     },
     async downgradeToFreePlan(platformId: string): Promise<void> {

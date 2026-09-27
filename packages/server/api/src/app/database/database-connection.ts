@@ -3,9 +3,9 @@ import {
     DataSource,
     EntitySchema,
 } from 'typeorm'
+import { AgentEntity } from '../agents/agent.entity'
 import { AIProviderEntity } from '../ai/ai-provider-entity'
 import { AiToolConfigEntity } from '../ai/ai-tool-config-entity'
-import { AgentEntity } from '../agents/agent.entity'
 import { PlatformAnalyticsReportEntity } from '../analytics/platform-analytics-report.entity'
 import { ApiKeyEntity } from '../api-keys/api-key.entity'
 import { ConnectionEntity } from '../app-connection/app-connection.entity'

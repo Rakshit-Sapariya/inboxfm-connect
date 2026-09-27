@@ -1,4 +1,5 @@
 import { ActivepiecesError, assertNotNullOrUndefined, ErrorCode, isNil } from '@inboxfm-connect/core-utils'
+import { safeHttp } from '@inboxfm-connect/server-utils'
 import { ApEdition, ApEnvironment, AuthenticationResponse, EndpointScope, PlatformRole, PrincipalType, Project, ProjectType, SsoDomainVerificationStatus, TelemetryEventName, User, UserIdentity, UserIdentityProvider, UserStatus } from '@inboxfm-connect/shared'
 import { FastifyBaseLogger, FastifyRequest } from 'fastify'
 import { system } from '../helper/system/system'
@@ -220,17 +221,10 @@ export const authenticationUtils = (log: FastifyBaseLogger) => ({
             return
         }
         try {
-            const response = await fetch(
+            await safeHttp.axios.post(
                 'https://us-central1-activepieces-b3803.cloudfunctions.net/addContact',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ email: identity.email }),
-                },
+                { email: identity.email },
             )
-            await response.json()
         }
         catch (error) {
             log.warn({ error }, '[authenticationUtils#saveNewsLetterSubscriber] Failed to save newsletter subscriber')

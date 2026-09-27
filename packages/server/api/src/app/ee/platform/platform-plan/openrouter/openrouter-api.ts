@@ -1,3 +1,5 @@
+import { safeHttp } from '@inboxfm-connect/server-utils'
+import { isAxiosError } from 'axios'
 import { system } from '../../../../helper/system/system'
 import { AppSystemProp } from '../../../../helper/system/system-props'
 
@@ -7,61 +9,59 @@ export const openRouterApi = {
     async createKey(request: CreateKeyRequest): Promise<CreateKeyResponse> {
         const apiKey = system.getOrThrow(AppSystemProp.OPENROUTER_PROVISION_KEY)
 
-        const res = await fetch(`${OPENROUTER_BASE_URL}/keys`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(request),
-        })
-
-        if (!res.ok) {
-            const text = await res.text()
-            throw new Error(`[OpenRouter] createKey error: ${res.status} ${text}`)
+        try {
+            const { data } = await safeHttp.axios.post<CreateKeyResponse>(`${OPENROUTER_BASE_URL}/keys`, request, {
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+            })
+            return data
         }
-
-        return res.json()
+        catch (err) {
+            const status = isAxiosError(err) ? err.response?.status : 'unknown'
+            const text = isAxiosError(err) && err.response?.data ? JSON.stringify(err.response.data) : (err instanceof Error ? err.message : String(err))
+            throw new Error(`[OpenRouter] createKey error: ${status} ${text}`)
+        }
     },
 
     async updateKey(request: UpdateKeyRequest): Promise<UpdateKeyResponse> {
         const apiKey = system.getOrThrow(AppSystemProp.OPENROUTER_PROVISION_KEY)
         const { hash, ...rest } = request
 
-        const res = await fetch(`${OPENROUTER_BASE_URL}/keys/${hash}`, {
-            method: 'PATCH',
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(rest),
-        })
-
-        if (!res.ok) {
-            const text = await res.text()
-            throw new Error(`[OpenRouter] updateKey error: ${res.status} ${text}`)
+        try {
+            const { data } = await safeHttp.axios.patch<UpdateKeyResponse>(`${OPENROUTER_BASE_URL}/keys/${hash}`, rest, {
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+            })
+            return data
         }
-
-        return res.json()
+        catch (err) {
+            const status = isAxiosError(err) ? err.response?.status : 'unknown'
+            const text = isAxiosError(err) && err.response?.data ? JSON.stringify(err.response.data) : (err instanceof Error ? err.message : String(err))
+            throw new Error(`[OpenRouter] updateKey error: ${status} ${text}`)
+        }
     },
 
     async getKey(request: GetKeyRequest): Promise<GetKeyResponse> {
         const apiKey = system.getOrThrow(AppSystemProp.OPENROUTER_PROVISION_KEY)
 
-        const res = await fetch(`${OPENROUTER_BASE_URL}/keys/${request.hash}`, {
-            method: 'GET',
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-            },
-        })
-
-        if (!res.ok) {
-            const text = await res.text()
-            throw new Error(`[OpenRouter] getKey error: ${res.status} ${text}`)
+        try {
+            const { data } = await safeHttp.axios.get<GetKeyResponse>(`${OPENROUTER_BASE_URL}/keys/${request.hash}`, {
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+            })
+            return data
         }
-
-        return res.json()
+        catch (err) {
+            const status = isAxiosError(err) ? err.response?.status : 'unknown'
+            const text = isAxiosError(err) && err.response?.data ? JSON.stringify(err.response.data) : (err instanceof Error ? err.message : String(err))
+            throw new Error(`[OpenRouter] getKey error: ${status} ${text}`)
+        }
     },
 
     async listKeys(request: ListKeysRequest): Promise<ListKeysResponse> {
@@ -76,19 +76,19 @@ export const openRouterApi = {
         }
         const url = `${OPENROUTER_BASE_URL}/keys?${params.toString()}`
 
-        const res = await fetch(url, {
-            method: 'GET',
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-            },
-        })
-
-        if (!res.ok) {
-            const text = await res.text()
-            throw new Error(`[OpenRouter] listKeys error: ${res.status} ${text}`)
+        try {
+            const { data } = await safeHttp.axios.get<ListKeysResponse>(url, {
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                },
+            })
+            return data
         }
-
-        return res.json()
+        catch (err) {
+            const status = isAxiosError(err) ? err.response?.status : 'unknown'
+            const text = isAxiosError(err) && err.response?.data ? JSON.stringify(err.response.data) : (err instanceof Error ? err.message : String(err))
+            throw new Error(`[OpenRouter] listKeys error: ${status} ${text}`)
+        }
     },
 }
 

@@ -1,4 +1,5 @@
 import { ActivepiecesError, assertNotEqual, ErrorCode, isNil } from '@inboxfm-connect/core-utils'
+import { safeHttp } from '@inboxfm-connect/server-utils'
 import { FastifyBaseLogger } from 'fastify'
 import jwksClient from 'jwks-rsa'
 import { JwtSignAlgorithm, jwtUtils } from '../../../helper/jwt-utils'
@@ -49,21 +50,21 @@ const exchangeCodeForIdToken = async (
     clientSecret: string,
     code: string,
 ): Promise<string> => {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
+    const { data: responseBody } = await safeHttp.axios.post<{ id_token?: string }>(
+        'https://oauth2.googleapis.com/token',
+        new URLSearchParams({
             code,
             client_id: clientId,
             client_secret: clientSecret,
             redirect_uri: await federatedAuthnService(log).getThirdPartyRedirectUrl(),
             grant_type: 'authorization_code',
-        }),
-    })
-
-    const responseBody = await response.json() as { id_token?: string }
+        }).toString(),
+        {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+        },
+    )
     if (isNil(responseBody.id_token)) {
         throw new ActivepiecesError({
             code: ErrorCode.INVALID_CREDENTIALS,

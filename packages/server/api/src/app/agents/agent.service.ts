@@ -1,4 +1,4 @@
-import { apId, isNil, SeekPage } from '@inboxfm-connect/core-utils'
+import { apId, isNil } from '@inboxfm-connect/core-utils'
 import { Agent, AgentOutputField, AgentTool } from '@inboxfm-connect/shared'
 import { repoFactory } from '../core/db/repo-factory'
 import { AgentEntity, AgentSchema } from './agent.entity'
@@ -21,7 +21,7 @@ export const agentService = {
         status?: 'ENABLED' | 'DISABLED'
     }): Promise<Agent> {
         const id = params.id ?? apId()
-        const newAgent: AgentSchema = {
+        const newAgent: Agent = {
             id,
             created: new Date().toISOString(),
             updated: new Date().toISOString(),
@@ -36,8 +36,6 @@ export const agentService = {
             tools: params.tools ?? [],
             structuredOutput: params.structuredOutput ?? null,
             status: params.status ?? 'ENABLED',
-            project: undefined as any,
-            platform: undefined as any,
         }
 
         return agentRepo().save(newAgent)
