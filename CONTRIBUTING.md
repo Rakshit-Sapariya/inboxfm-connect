@@ -6,7 +6,7 @@ Contributions to documentation, tests, integration actions, and the headless pla
 
 ## 🛠️ Prerequisites
 
-Before getting started, ensure your local development environment meets the following requirements:
+Before getting started, ensure your local development environment meets the following requirements (for full system setup instructions and Docker Compose installation options, see [README.md](README.md)):
 
 - **Node.js**: `v18.x`, `v22.x`, or `v24.x` (enforced by `tools/setup-dev.js`; Node 20 is strictly not supported by the build toolchain).
 - **Bun**: `1.3.3` (required package manager pinned in `package.json`; auto-installed globally by `tools/setup-dev.js` if not found).
@@ -17,9 +17,21 @@ Before getting started, ensure your local development environment meets the foll
 
 ---
 
+## 📖 Architecture & Standards
+
+Before writing code or opening pull requests, consult the authoritative documentation on platform design, guidelines, and rules:
+- [ARCHITECTURE.md](ARCHITECTURE.md): Platform architecture, module boundaries, tenant isolation, and service designs.
+- [AGENTS.md](AGENTS.md): Development workflows, code review standards, and the regression-testing mandate.
+- [.claude/rules/](.claude/rules/): Granular coding and architectural rules across backend, frontend, security, and integrations.
+- [.agents/features/](.agents/features/): Feature specifications, domain playbooks, and subsystem guides.
+
+---
+
 ## 🚀 Local Development Setup
 
 ### 1. Fork and Clone
+
+Always branch from `upstream/dev`:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/inboxfm-connect.git
@@ -66,35 +78,35 @@ Configuration is controlled via `.env.dev`. Key settings:
 
 ## 🧩 Piece Development Quickstart
 
-Integrations in Inboxfm Connect live under `packages/integrations/{community,core}` and are built using `@inboxfm-connect/pieces-framework` and `@inboxfm-connect/pieces-common`.
+Integrations in Inboxfm Connect live under `packages/integrations/community/<piece-name>` (or `packages/integrations/core/<piece-name>`). For step-by-step guidance on piece architecture and action/trigger implementations, see [docs/build-pieces/building-pieces/development-setup.mdx](docs/build-pieces/building-pieces/development-setup.mdx) and [docs/build-pieces/building-pieces/start-building.mdx](docs/build-pieces/building-pieces/start-building.mdx).
 
-### Scaffolding a New Piece
+### Creating a New Piece
 
-Use the CLI generator to scaffold a new piece:
+1. Create a new directory under `packages/integrations/community/<piece-name>`.
+2. Mirror the standard piece layout from an established piece (such as `packages/integrations/community/bexio` or `coupa`), providing:
+   - `package.json` scoped as `@inboxfm-connect/piece-<name>`, importing `@inboxfm-connect/pieces-framework` and `@inboxfm-connect/pieces-common`, with scripts for `build`, `bundle`, `lint`, and `"test": "vitest run"`.
+   - `tsconfig.json` and `tsconfig.lib.json`.
+   - `src/index.ts` defining the piece via `createPiece(...)`.
+   - `src/lib/actions/` and `src/lib/triggers/` defining piece operations.
 
-```bash
-npm run create-piece
-```
-
-You can also scaffold individual actions or triggers within an existing piece:
-
-```bash
-npm run create-action
-npm run create-trigger
-```
+> **Note on CLI Scaffolding**: The historical scaffolding script (`npm run create-piece`) targets the legacy `packages/pieces` folder rather than the active `packages/integrations` tree. Until the CLI is rewired, create new piece directories directly under `packages/integrations/community/` or `packages/integrations/core/` to ensure Turborepo, workspace resolution, and CI integration checks recognize them.
 
 ### Building & Testing Pieces
 
-To build a specific piece:
+To build and bundle a piece:
 
 ```bash
-npm run build-piece <piece-name>
+bun x turbo run build bundle --filter=@inboxfm-connect/piece-<piece-name>
 ```
 
-To run unit tests for an integration piece, navigate to its folder under `packages/integrations/community/<piece-name>` or `packages/integrations/core/<piece-name>` and run:
+To run unit tests for a specific piece:
 
 ```bash
-npx vitest run
+# Via turbo filter:
+bun --filter=@inboxfm-connect/piece-<piece-name> test
+
+# Or directly with vitest:
+npx vitest run packages/integrations/community/<piece-name>
 ```
 
 ---
@@ -121,10 +133,10 @@ npm run lint-dev
 # 2. Unit test suites
 npm run test-unit
 
-# 3. API integration tests (PGlite & memory Redis)
+# 3. API integration tests (PGlite & memory Redis; runs check-migrations automatically)
 npm run test-api
 
-# 4. Database migration integrity
+# 4. Standalone database migration integrity check
 npm run check-migrations
 
 # 5. Licensing boundary audit
@@ -137,21 +149,27 @@ To run linting and typechecking specifically on the web dashboard:
 bun x turbo run lint typecheck --filter=@inboxfm-connect/web
 ```
 
+> **Testing Mandate**: Always include meaningful regression tests for behavior changes. Cover the edition and plan paths affected by a change, including CE, EE, and Cloud where applicable. Tests inside the PR provide the authoritative evidence for review and must pass cleanly in CI.
+
 ---
 
 ## 📝 Commit & PR Conventions
 
+- **One Issue per PR**: Ensure every PR corresponds to a single tracked issue (`Resolves #123`). Check existing open issues and pull requests first to avoid duplicate efforts.
 - **Branch Policy**: Always branch from `upstream/dev` and open pull requests targeting the **`dev`** branch. `main` is reserved for maintainer-reviewed promotion releases.
 - **Commit Message Convention**: Commit messages are strictly validated by Commitlint and must follow the Conventional Commits specification under 100 characters:
   ```text
   <type>(<scope>): <subject> (#<issue>)
   ```
-  Allowed types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`.
+  Allowed types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`, `build`, `style`, `revert`. Including the issue trailer (`(#<issue>)`) is recommended.
   Example:
   ```text
   fix(infra): update setup-dev and crowdin to packages/integrations path (#179)
   ```
 - **PR Description**: Include a clear summary of changes, problem addressed, resolution details, and reference the associated issue (`Resolves #123`).
+- **PR Labels**: Pull requests are categorized by maintainers using standard labels:
+  - Types: `feature`, `bug`, `refactor`, `chore`, `docs`, `skip-changelog`
+  - Areas: `area/frontend`, `area/backend`, `area/engine`, `area/integrations`, `area/infra`
 
 ---
 
