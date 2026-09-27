@@ -16,6 +16,7 @@ import {
     UpdateTriggerBindingRequest,
     WorkerJobType,
 } from '@inboxfm-connect/shared'
+import { FastifyBaseLogger } from 'fastify'
 import { repoFactory } from '../../core/db/repo-factory'
 import { userInteractionWatcher } from '../../helper/user-interaction/user-interaction-watcher'
 import { projectExecutionConcurrencyGuard } from '../concurrency/project-execution-concurrency-guard'
@@ -225,6 +226,27 @@ export const triggerBindingService = {
         }
 
         await triggerBindingRepo().delete({ id, projectId, platformId })
+    },
+
+    /**
+     * Boot path: re-register scheduler entries for every ENABLED binding from
+     * the DB. Scheduler-only — engine ON_ENABLE hooks are NOT re-fired, since
+     * external registrations from before the restart still stand. One bad
+     * binding must not abort the boot.
+     */
+    async reRegisterEnabledSchedules({ log }: { log: FastifyBaseLogger }): Promise<{ bindings: number }> {
+        const bindings = await triggerBindingRepo().findBy({ status: TriggerBindingStatus.ENABLED })
+        let registered = 0
+        for (const binding of bindings) {
+            try {
+                await syncTriggerSchedule(binding)
+                registered += 1
+            }
+            catch (error) {
+                log.warn({ error, binding: { id: binding.id } }, '[triggerBindingService#reRegisterEnabledSchedules] Skipping schedule that failed to register')
+            }
+        }
+        return { bindings: registered }
     },
 }
 

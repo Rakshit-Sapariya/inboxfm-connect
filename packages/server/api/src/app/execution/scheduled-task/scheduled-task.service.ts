@@ -1,5 +1,5 @@
 import { ActivepiecesError, apId, ErrorCode, isNil, SeekPage } from '@inboxfm-connect/core-utils'
-import { scheduler } from '@inboxfm-connect/scheduler'
+import { cronParser, scheduler } from '@inboxfm-connect/scheduler'
 import {
     CreateScheduledTaskRequest,
     Execution,
@@ -9,6 +9,7 @@ import {
     ScheduledTaskStatus,
     UpdateScheduledTaskRequest,
 } from '@inboxfm-connect/shared'
+import { FastifyBaseLogger } from 'fastify'
 import { repoFactory } from '../../core/db/repo-factory'
 import { executionService } from '../execution.service'
 import { ScheduledTaskEntity, ScheduledTaskSchema } from './scheduled-task-entity'
@@ -34,7 +35,9 @@ export const scheduledTaskService = {
             timezone: request.timezone ?? 'UTC',
             status: request.status ?? ScheduledTaskStatus.ENABLED,
             lastRunAt: null,
-            nextRunAt: null,
+            nextRunAt: (request.status ?? ScheduledTaskStatus.ENABLED) === ScheduledTaskStatus.ENABLED
+                ? computeNextRunAt({ cronExpression: request.cronExpression, timezone: request.timezone ?? 'UTC' })
+                : null,
         }
 
         const saved = await scheduledTaskRepo().save(newTask)
@@ -69,12 +72,19 @@ export const scheduledTaskService = {
     async update({ id, projectId, platformId, request }: UpdateParams): Promise<ScheduledTask> {
         const existing = await scheduledTaskService.getOneOrThrow({ id, projectId, platformId })
 
+        const mergedStatus = request.status ?? existing.status
         const updatedTask: ScheduledTask = {
             ...existing,
             ...(request.prompt !== undefined ? { prompt: request.prompt } : {}),
             ...(request.cronExpression !== undefined ? { cronExpression: request.cronExpression } : {}),
             ...(request.timezone !== undefined ? { timezone: request.timezone } : {}),
             ...(request.status !== undefined ? { status: request.status } : {}),
+            nextRunAt: mergedStatus === ScheduledTaskStatus.ENABLED
+                ? computeNextRunAt({
+                    cronExpression: request.cronExpression ?? existing.cronExpression,
+                    timezone: request.timezone ?? existing.timezone,
+                })
+                : null,
             updated: new Date().toISOString(),
         }
 
@@ -100,10 +110,37 @@ export const scheduledTaskService = {
         const task = await scheduledTaskService.getOneOrThrow({ id, projectId, platformId })
         return dispatchExecution(task)
     },
+
+    /**
+     * Boot path: the in-process scheduler loses all registrations on restart,
+     * so re-register every ENABLED task from the DB and refresh its nextRunAt.
+     * One bad cron must not abort the boot — failures are logged per task.
+     */
+    async reRegisterEnabledSchedules({ log }: { log: FastifyBaseLogger }): Promise<{ tasks: number }> {
+        const tasks = await scheduledTaskRepo().findBy({ status: ScheduledTaskStatus.ENABLED })
+        let registered = 0
+        for (const task of tasks) {
+            try {
+                await syncSchedule(task)
+                await scheduledTaskRepo().update({ id: task.id }, {
+                    nextRunAt: computeNextRunAt({ cronExpression: task.cronExpression, timezone: task.timezone }),
+                })
+                registered += 1
+            }
+            catch (error) {
+                log.warn({ error, task: { id: task.id } }, '[scheduledTaskService#reRegisterEnabledSchedules] Skipping schedule that failed to register')
+            }
+        }
+        return { tasks: registered }
+    },
 }
 
 function getJobName(taskId: string): string {
     return `user-task-${taskId}`
+}
+
+function computeNextRunAt({ cronExpression, timezone }: { cronExpression: string, timezone: string }): string {
+    return cronParser.computeNextTick({ cronExpression, timezone }).toISOString()
 }
 
 async function syncSchedule(task: ScheduledTask): Promise<void> {
@@ -129,7 +166,19 @@ async function dispatchExecution(task: ScheduledTask): Promise<Execution> {
         platformId: task.platformId,
     })
 
-    await scheduledTaskRepo().update({ id: task.id }, { lastRunAt: new Date().toISOString() })
+    // Best-effort: a corrupt stored cron (written before create/update
+    // validation existed) must not turn an already-created execution into a 500.
+    let nextRunAt: string | null = null
+    try {
+        nextRunAt = computeNextRunAt({ cronExpression: task.cronExpression, timezone: task.timezone })
+    }
+    catch {
+        nextRunAt = null
+    }
+    await scheduledTaskRepo().update({ id: task.id }, {
+        lastRunAt: new Date().toISOString(),
+        nextRunAt,
+    })
     return execution
 }
 
