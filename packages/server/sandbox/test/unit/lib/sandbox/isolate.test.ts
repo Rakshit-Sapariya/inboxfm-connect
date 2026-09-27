@@ -57,6 +57,7 @@ async function callCreate({
     enginePath = '/host/cache/common/main.js',
     sandboxId = 'sb-abc',
     resourceLimits = { memoryLimitMb: 256, timeLimitSeconds: 60 },
+    reusable,
 }: {
     mounts?: SandboxMount[]
     env?: Record<string, string>
@@ -64,6 +65,7 @@ async function callCreate({
     enginePath?: string
     sandboxId?: string
     resourceLimits?: { memoryLimitMb: number, timeLimitSeconds: number }
+    reusable?: boolean
 } = {}) {
     const maker = isolateProcess(createMockLogger(), enginePath, '/host/cache/codes', boxId)
     return maker.create({
@@ -72,6 +74,7 @@ async function callCreate({
         mounts,
         env,
         resourceLimits,
+        reusable,
     })
 }
 
@@ -196,6 +199,20 @@ describe('isolateProcess', () => {
             expect(args).toContain('--chdir=/root')
             expect(args).toContain('--processes')
             expect(args).toContain('--share-net')
+            expect(args).toContain('--mem=524288')
+            expect(args).toContain('--time=120')
+        })
+
+        it('omits --time flag when sandbox is reusable to avoid cumulative CPU SIGKILL', async () => {
+            await callCreate({ reusable: true, resourceLimits: { memoryLimitMb: 512, timeLimitSeconds: 120 } })
+            const args: string[] = spawnMock.mock.calls[0][1]
+            expect(args).toContain('--mem=524288')
+            expect(args.some((a) => a.startsWith('--time='))).toBe(false)
+        })
+
+        it('includes --time flag for non-reusable sandboxes', async () => {
+            await callCreate({ reusable: false, resourceLimits: { memoryLimitMb: 512, timeLimitSeconds: 120 } })
+            const args: string[] = spawnMock.mock.calls[0][1]
             expect(args).toContain('--mem=524288')
             expect(args).toContain('--time=120')
         })

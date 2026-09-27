@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import { ActivepiecesError, ErrorCode } from '@inboxfm-connect/core-utils'
 import { EngineOperation, EngineOperationType, EngineResponseStatus, TriggerHookType } from '@inboxfm-connect/shared'
 import { type Socket as ClientSocket, io as ioClient } from 'socket.io-client'
+import path from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSandbox } from '../../../../src/lib/sandbox/sandbox'
 import { Sandbox, SandboxLogger, SandboxMount, SandboxProcessMaker } from '../../../../src/lib/sandbox/types'
@@ -162,7 +163,7 @@ describe('createSandbox', () => {
             const createCall = (testPM.maker.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
             const codeMount = createCall.mounts.find((m: { sandboxPath: string }) => m.sandboxPath.startsWith('/root/codes'))
             expect(codeMount).toEqual({
-                hostPath: '/tmp/test-cache/codes/fv-1',
+                hostPath: path.join('/tmp/test-cache/codes', 'fv-1'),
                 sandboxPath: '/root/codes/fv-1',
                 optional: true,
             })
@@ -206,7 +207,7 @@ describe('createSandbox', () => {
             const createCall = (testPM.maker.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
             const customPieceMount = createCall.mounts.find((m: SandboxMount) => m.sandboxPath === '/root/custom_pieces')
             expect(customPieceMount).toEqual({
-                hostPath: '/tmp/test-cache/custom_pieces/plat-xyz',
+                hostPath: path.resolve('/tmp/test-cache', 'custom_pieces', 'plat-xyz'),
                 sandboxPath: '/root/custom_pieces',
                 optional: true,
             })
@@ -298,9 +299,9 @@ describe('createSandbox', () => {
             const createCall = (testPM.maker.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
             expect(createCall.mounts).toEqual([
                 { hostPath: '/host/common', sandboxPath: '/root/common' },
-                { hostPath: '/tmp/test-cache/codes/fv-1', sandboxPath: '/root/codes/fv-1', optional: true },
+                { hostPath: path.join('/tmp/test-cache/codes', 'fv-1'), sandboxPath: '/root/codes/fv-1', optional: true },
                 { hostPath: '/host/x', sandboxPath: '/root/x' },
-                { hostPath: '/tmp/test-cache/custom_pieces/plat-1', sandboxPath: '/root/custom_pieces', optional: true },
+                { hostPath: path.resolve('/tmp/test-cache', 'custom_pieces', 'plat-1'), sandboxPath: '/root/custom_pieces', optional: true },
             ])
         })
 
@@ -599,6 +600,33 @@ describe('createSandbox', () => {
 
             client.on('rpc', () => {
                 child.emit('close', 134, null)
+            })
+
+            const executePromise = sandbox.execute(
+                testOperationType,
+                testOperation,
+                { timeoutInSeconds: 10 },
+            )
+
+            await expect(executePromise).rejects.toThrow()
+            try {
+                await executePromise
+            }
+            catch (err) {
+                expect((err as ActivepiecesError).error.code).toBe(ErrorCode.SANDBOX_MEMORY_ISSUE)
+            }
+        })
+
+        it('rejects with SANDBOX_MEMORY_ISSUE on isolate memory cap exceeded (SIGKILL without shutdown)', async () => {
+            const { sandbox } = await startSandbox()
+            const client = testPM.getClient()
+            const child = testPM.getChild()
+
+            client.on('rpc', () => {
+                // When isolate hard-kills a process that breaches its memory ceiling, it issues a SIGKILL.
+                // handleProcessExit must classify an unprompted SIGKILL (killedByShutdown=false, killedByTimeout=false)
+                // as SANDBOX_MEMORY_ISSUE.
+                child.emit('close', null, 'SIGKILL')
             })
 
             const executePromise = sandbox.execute(

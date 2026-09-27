@@ -18,6 +18,7 @@ export type CreateSandboxProcessParams = {
     mounts: SandboxMount[]
     env: Record<string, string>
     resourceLimits: SandboxResourceLimits
+    reusable?: boolean
 }
 
 export type SandboxProcessMaker = {
