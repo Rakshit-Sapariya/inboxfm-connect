@@ -32,8 +32,8 @@ export const licenseKeysService = (log: FastifyBaseLogger) => ({
                     params: request,
                 })
             }
-            if (isAxiosError(err) && err.response?.data) {
-                const errorMessage = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)
+            if (isAxiosError(err) && err.response) {
+                const errorMessage = typeof err.response.data === 'string' && err.response.data ? err.response.data : JSON.stringify(err.response.data ?? {})
                 handleUnexpectedSecretsManagerError(log, errorMessage)
             }
             throw err
@@ -41,10 +41,10 @@ export const licenseKeysService = (log: FastifyBaseLogger) => ({
     },
     async markAsActiviated(request: { key: string, platformId?: string }): Promise<void> {
         try {
-            await safeHttp.axios.post(`${secretManagerLicenseKeysRoute}/activate`, request, {
+            const response = await safeHttp.axios.post(`${secretManagerLicenseKeysRoute}/activate`, request, {
                 validateStatus: (status) => status === StatusCodes.OK || status === StatusCodes.CONFLICT || status === StatusCodes.NOT_FOUND,
             })
-            if (request.platformId) {
+            if (response.status === StatusCodes.OK && request.platformId) {
                 rejectedPromiseHandler(telemetry(log).trackPlatform(request.platformId, {
                     name: TelemetryEventName.KEY_ACTIVATED,
                     payload: {
@@ -70,8 +70,8 @@ export const licenseKeysService = (log: FastifyBaseLogger) => ({
             if (isAxiosError(err) && err.response?.status === StatusCodes.NOT_FOUND) {
                 return null
             }
-            if (isAxiosError(err) && err.response?.data) {
-                const errorMessage = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)
+            if (isAxiosError(err) && err.response) {
+                const errorMessage = typeof err.response.data === 'string' && err.response.data ? err.response.data : JSON.stringify(err.response.data ?? {})
                 handleUnexpectedSecretsManagerError(log, errorMessage)
             }
             throw err
@@ -104,8 +104,8 @@ export const licenseKeysService = (log: FastifyBaseLogger) => ({
                     },
                 })
             }
-            if (isAxiosError(err) && err.response?.data) {
-                const errorMessage = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)
+            if (isAxiosError(err) && err.response) {
+                const errorMessage = typeof err.response.data === 'string' && err.response.data ? err.response.data : JSON.stringify(err.response.data ?? {})
                 handleUnexpectedSecretsManagerError(log, errorMessage)
             }
             throw err

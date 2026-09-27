@@ -50,28 +50,40 @@ const exchangeCodeForIdToken = async (
     clientSecret: string,
     code: string,
 ): Promise<string> => {
-    const { data: responseBody } = await safeHttp.axios.post<{ id_token?: string }>(
-        'https://oauth2.googleapis.com/token',
-        new URLSearchParams({
-            code,
-            client_id: clientId,
-            client_secret: clientSecret,
-            redirect_uri: await federatedAuthnService(log).getThirdPartyRedirectUrl(),
-            grant_type: 'authorization_code',
-        }).toString(),
-        {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
+    try {
+        const { data: responseBody } = await safeHttp.axios.post<{ id_token?: string }>(
+            'https://oauth2.googleapis.com/token',
+            new URLSearchParams({
+                code,
+                client_id: clientId,
+                client_secret: clientSecret,
+                redirect_uri: await federatedAuthnService(log).getThirdPartyRedirectUrl(),
+                grant_type: 'authorization_code',
+            }).toString(),
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                validateStatus: () => true,
             },
-        },
-    )
-    if (isNil(responseBody.id_token)) {
+        )
+        if (isNil(responseBody?.id_token)) {
+            throw new ActivepiecesError({
+                code: ErrorCode.INVALID_CREDENTIALS,
+                params: null,
+            }, 'Google OAuth token exchange failed: no id_token returned')
+        }
+        return responseBody.id_token
+    }
+    catch (err) {
+        if (err instanceof ActivepiecesError) {
+            throw err
+        }
         throw new ActivepiecesError({
             code: ErrorCode.INVALID_CREDENTIALS,
             params: null,
-        }, 'Google OAuth token exchange failed: no id_token returned')
+        }, `Google OAuth token exchange failed: ${err instanceof Error ? err.message : String(err)}`)
     }
-    return responseBody.id_token
 }
 
 const verifyIdToken = async (

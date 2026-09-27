@@ -32,7 +32,7 @@ export const AgentEntity = new EntitySchema<AgentSchema>({
             nullable: true,
         },
         prompt: {
-            type: String,
+            type: 'text',
             nullable: false,
         },
         maxSteps: {
@@ -41,15 +41,15 @@ export const AgentEntity = new EntitySchema<AgentSchema>({
             default: 10,
         },
         model: {
-            type: 'json',
+            type: 'jsonb',
             nullable: false,
         },
         tools: {
-            type: 'json',
+            type: 'jsonb',
             nullable: false,
         },
         structuredOutput: {
-            type: 'json',
+            type: 'jsonb',
             nullable: true,
         },
         status: {
