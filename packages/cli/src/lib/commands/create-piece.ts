@@ -31,7 +31,7 @@ const validatePackageName = async (packageName: string) => {
 };
 
 const checkIfPieceExists = async (pieceName: string, pieceType: string) => {
-  const piecePath = path.resolve('packages', 'pieces', pieceType, pieceName);
+  const piecePath = path.resolve('packages', 'integrations', pieceType, pieceName);
   try {
     await readdir(piecePath);
     console.log(chalk.red(`🚨 Piece already exists at ${piecePath}`));
@@ -50,7 +50,7 @@ const scaffoldPiece = async (
   packageName: string,
   pieceType: string
 ) => {
-  const baseDir = path.resolve('packages', 'pieces', pieceType, pieceName);
+  const baseDir = path.resolve('packages', 'integrations', pieceType, pieceName);
   const srcDir = path.join(baseDir, 'src');
   const libDir = path.join(srcDir, 'lib');
   const i18nDir = path.join(srcDir, 'i18n');
@@ -199,7 +199,7 @@ export const createPiece = async (
   console.log(chalk.green('✨  Done!'));
   console.log(
     chalk.yellow(
-      `The piece has been generated at: packages/pieces/${pieceType}/${pieceName}`
+      `The piece has been generated at: packages/integrations/${pieceType}/${pieceName}`
     )
   );
 };

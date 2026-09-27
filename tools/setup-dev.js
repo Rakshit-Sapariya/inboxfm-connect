@@ -44,6 +44,9 @@ execSync('bun install --frozen-lockfile', {
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'framework', 'common']);
 
 const findAllPieceFolders = (folderPath) => {
+  if (!fs.existsSync(folderPath)) {
+    throw new Error(`❌ Directory not found: "${folderPath}". Expected pieces at packages/integrations.`);
+  }
   const results = [];
   for (const entry of fs.readdirSync(folderPath)) {
     if (IGNORED_DIRS.has(entry)) continue;
@@ -65,21 +68,25 @@ try {
   envConfig = dotenv.parse(fs.readFileSync('.env.dev', 'utf-8'));
 } catch { }
 
-const devPieces = process.env.AP_DEV_PIECES || envConfig.AP_DEV_PIECES;
+const rawDevPieces = process.env.AP_DEV_PIECES || envConfig.AP_DEV_PIECES;
+const devPieces = typeof rawDevPieces === 'string' ? rawDevPieces.trim() : '';
 
 if (devPieces) {
-  const pieceNames = [...new Set(devPieces.split(',').map(n => n.trim()))];
-  const allFolders = findAllPieceFolders(path.resolve('packages', 'integrations'));
+  const pieceNames = [...new Set(devPieces.split(',').map(n => n.trim()).filter(Boolean))];
+  if (pieceNames.length > 0) {
+    const allFolders = findAllPieceFolders(path.resolve('packages', 'integrations'));
 
-  const pieceFilters = pieceNames.map(name => {
-    const dir = allFolders.find(p => p.endsWith(path.sep + name));
-    if (!dir) {
-      throw new Error(`❌ Piece folder not found for: "${name}".`);
-    }
-    const packageName = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8')).name;
-    return `--filter=${packageName}`;
-  }).join(' ');
+    const pieceFilters = pieceNames.map(name => {
+      const dir = allFolders.find(p => p.endsWith(path.sep + name));
+      if (!dir) {
+        throw new Error(`❌ Piece folder not found for: "${name}".`);
+      }
+      const packageName = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8')).name;
+      return `--filter=${packageName}`;
+    }).join(' ');
 
-  console.log(`Building dev pieces: ${devPieces}`);
-  execSync(`npx turbo run build ${pieceFilters}`, { stdio: 'inherit' });
+    console.log(`Building dev pieces: ${devPieces}`);
+    execSync(`npx turbo run build ${pieceFilters}`, { stdio: 'inherit' });
+  }
 }
+

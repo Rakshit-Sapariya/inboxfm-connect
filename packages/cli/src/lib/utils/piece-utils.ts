@@ -9,7 +9,7 @@ import FormData from 'form-data';
 import fs from 'fs';
 import { preparePieceDistForPublish } from './prepare-piece-utils';
 
-export const piecesPath = () => path.join(cwd(), 'packages', 'pieces')
+export const piecesPath = () => path.join(cwd(), 'packages', 'integrations')
 export const customPiecePath = () => path.join(piecesPath(), 'custom')
 
 /**
