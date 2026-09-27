@@ -231,12 +231,21 @@ export const triggerBindingService = {
     /**
      * Boot path: re-register scheduler entries for every ENABLED binding from
      * the DB. Scheduler-only — engine ON_ENABLE hooks are NOT re-fired, since
-     * external registrations from before the restart still stand. One bad
-     * binding must not abort the boot.
+     * external registrations from before the restart still stand. One bad item
+     * must not abort the boot — not a bad row, and not even a transient DB
+     * failure listing the rows.
      */
-    async reRegisterEnabledSchedules({ log }: { log: FastifyBaseLogger }): Promise<{ bindings: number }> {
-        const bindings = await triggerBindingRepo().findBy({ status: TriggerBindingStatus.ENABLED })
+    async reRegisterEnabledSchedules({ log }: { log: FastifyBaseLogger }): Promise<{ registered: number, skipped: number, total: number }> {
+        let bindings: TriggerBinding[] = []
+        try {
+            bindings = await triggerBindingRepo().findBy({ status: TriggerBindingStatus.ENABLED })
+        }
+        catch (error) {
+            log.error({ error }, '[triggerBindingService#reRegisterEnabledSchedules] Listing enabled bindings failed, skipping schedule restore')
+            return { registered: 0, skipped: 0, total: 0 }
+        }
         let registered = 0
+        let skipped = 0
         for (const binding of bindings) {
             try {
                 await syncTriggerSchedule(binding)
@@ -244,9 +253,10 @@ export const triggerBindingService = {
             }
             catch (error) {
                 log.warn({ error, binding: { id: binding.id } }, '[triggerBindingService#reRegisterEnabledSchedules] Skipping schedule that failed to register')
+                skipped += 1
             }
         }
-        return { bindings: registered }
+        return { registered, skipped, total: bindings.length }
     },
 }
 
@@ -264,13 +274,21 @@ async function syncTriggerSchedule(binding: TriggerBinding): Promise<void> {
 
     const renewCron = typeof binding.settings?.renewCronExpression === 'string' ? binding.settings.renewCronExpression : null
     if (renewCron) {
-        await scheduler.cron({
-            name: `trigger-renew-${binding.id}`,
-            cronExpression: renewCron,
-            fn: async () => {
-                await triggerBindingService.renew({ id: binding.id, projectId: binding.projectId, platformId: binding.platformId })
-            },
-        })
+        try {
+            await scheduler.cron({
+                name: `trigger-renew-${binding.id}`,
+                cronExpression: renewCron,
+                fn: async () => {
+                    await triggerBindingService.renew({ id: binding.id, projectId: binding.projectId, platformId: binding.platformId })
+                },
+            })
+        }
+        catch (error) {
+            // Roll back the sibling job: callers treat a throw as "nothing was
+            // installed", so a half-installed binding must not stay live.
+            await scheduler.cancel(`trigger-cron-${binding.id}`)
+            throw error
+        }
     }
 }
 
