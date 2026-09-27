@@ -56,12 +56,14 @@ async function callCreate({
     boxId = 7,
     enginePath = '/host/cache/common/main.js',
     sandboxId = 'sb-abc',
+    resourceLimits = { memoryLimitMb: 256, timeLimitSeconds: 60 },
 }: {
     mounts?: SandboxMount[]
     env?: Record<string, string>
     boxId?: number
     enginePath?: string
     sandboxId?: string
+    resourceLimits?: { memoryLimitMb: number, timeLimitSeconds: number }
 } = {}) {
     const maker = isolateProcess(createMockLogger(), enginePath, '/host/cache/codes', boxId)
     return maker.create({
@@ -69,7 +71,7 @@ async function callCreate({
         command: [],
         mounts,
         env,
-        resourceLimits: { memoryLimitMb: 256, cpuMsPerSec: 1000, timeLimitSeconds: 60 },
+        resourceLimits,
     })
 }
 
@@ -187,22 +189,31 @@ describe('isolateProcess', () => {
             ])
         })
 
-        it('includes --box-id, --chdir=/root, --processes, --share-net', async () => {
-            await callCreate({ boxId: 42 })
+        it('includes --box-id, --chdir=/root, --processes, --share-net, --mem, --time', async () => {
+            await callCreate({ boxId: 42, resourceLimits: { memoryLimitMb: 512, timeLimitSeconds: 120 } })
             const args: string[] = spawnMock.mock.calls[0][1]
             expect(args).toContain('--box-id=42')
             expect(args).toContain('--chdir=/root')
             expect(args).toContain('--processes')
             expect(args).toContain('--share-net')
+            expect(args).toContain('--mem=524288')
+            expect(args).toContain('--time=120')
         })
 
-        it('runs node with engine path at /root/common/<basename>', async () => {
-            await callCreate({ enginePath: '/any/where/engine-main.js' })
+        it('runs node with --max-old-space-size and engine path at /root/common/<basename>', async () => {
+            await callCreate({ enginePath: '/any/where/engine-main.js', resourceLimits: { memoryLimitMb: 256, timeLimitSeconds: 60 } })
             const args: string[] = spawnMock.mock.calls[0][1]
-            expect(args[args.length - 2]).toBe(process.execPath)
+            expect(args[args.length - 3]).toBe(process.execPath)
+            expect(args[args.length - 2]).toBe('--max-old-space-size=256')
             expect(args[args.length - 1]).toBe('/root/common/engine-main.js')
-            expect(args[args.length - 3]).toBe('--')
-            expect(args[args.length - 4]).toBe('--run')
+            expect(args[args.length - 4]).toBe('--')
+            expect(args[args.length - 5]).toBe('--run')
+        })
+
+        it('normalizes Windows backslashes in enginePath to POSIX forward slashes inside isolate', async () => {
+            await callCreate({ enginePath: 'C:\\cache\\common\\engine-main.js' })
+            const args: string[] = spawnMock.mock.calls[0][1]
+            expect(args[args.length - 1]).toBe('/root/common/engine-main.js')
         })
 
         it('spawns with shell: false', async () => {

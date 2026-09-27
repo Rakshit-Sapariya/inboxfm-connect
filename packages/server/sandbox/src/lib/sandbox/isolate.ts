@@ -58,13 +58,13 @@ const etcDir = path.resolve(process.cwd(), 'packages/server/api/src/assets/etc')
 export function isolateProcess(log: SandboxLogger, enginePath: string, _codeDirectory: string, boxId: number): SandboxProcessMaker {
     return {
         create: async (params: CreateSandboxProcessParams) => {
-            const { sandboxId, mounts, env } = params
+            const { sandboxId, mounts, env, resourceLimits } = params
 
             for (const mount of mounts) {
                 assertMountInsideRoot(mount)
             }
 
-            const engineSandboxPath = path.join('/root/common', path.basename(enginePath))
+            const engineSandboxPath = path.posix.join('/root/common', path.posix.basename(enginePath.replace(/\\/g, '/')))
             const sandboxEnv = {
                 ...env,
                 AP_BASE_CODE_DIRECTORY: '/root/codes',
@@ -113,11 +113,14 @@ export function isolateProcess(log: SandboxLogger, enginePath: string, _codeDire
                 '--share-net',
                 `--box-id=${boxId}`,
                 '--processes',
+                `--mem=${resourceLimits.memoryLimitMb * 1024}`,
+                `--time=${resourceLimits.timeLimitSeconds}`,
                 '--chdir=/root',
                 ...envArgs,
                 '--run',
                 '--',
                 process.execPath,
+                `--max-old-space-size=${resourceLimits.memoryLimitMb}`,
                 engineSandboxPath,
             ]
 
