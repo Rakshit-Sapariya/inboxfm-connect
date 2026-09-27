@@ -1,7 +1,10 @@
 services:
   app:
-    image: ghcr.io/activepieces/activepieces:0.86.1
-    container_name: activepieces-app
+    image: ghcr.io/mihir-rabari/inboxfm-connect:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inboxfm-connect-app
     restart: unless-stopped
     ports:
       - '8080:80'
@@ -14,9 +17,13 @@ services:
     volumes:
       - ./cache:/usr/src/app/cache
     networks:
-      - activepieces
+      - inboxfm-connect
   worker:
-    image: ghcr.io/activepieces/activepieces:0.86.1
+    image: ghcr.io/mihir-rabari/inboxfm-connect:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inboxfm-connect-worker
     restart: unless-stopped
     depends_on:
       - app
@@ -28,7 +35,7 @@ services:
     volumes:
       - ./cache:/usr/src/app/cache
     networks:
-      - activepieces
+      - inboxfm-connect
   postgres:
     image: 'pgvector/pgvector:0.8.0-pg14'
     container_name: postgres
@@ -41,7 +48,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - activepieces
+      - inboxfm-connect
   redis:
     image: 'redis:7.0.7'
     container_name: redis
@@ -49,9 +56,10 @@ services:
     volumes:
       - 'redis_data:/data'
     networks:
-      - activepieces
+      - inboxfm-connect
 volumes:
   postgres_data:
   redis_data:
 networks:
-  activepieces:
+  inboxfm-connect:
+

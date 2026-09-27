@@ -6,20 +6,20 @@ apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 {{- end }}
 metadata:
-  name: {{ include "activepieces.fullname" . }}
+  name: {{ include "inboxfm-connect.fullname" . }}
   labels:
-    {{- include "activepieces.labels" . | nindent 4 }}
+    {{- include "inboxfm-connect.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   {{- if eq (.Values.workloadType | default "rollout") "statefulset" }}
-  serviceName: {{ include "activepieces.fullname" . }}
+  serviceName: {{ include "inboxfm-connect.fullname" . }}
   podManagementPolicy: {{ .Values.podManagementPolicy | default "OrderedReady" }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "activepieces.selectorLabels" . | nindent 6 }}
+      {{- include "inboxfm-connect.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -28,7 +28,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "activepieces.labels" . | nindent 8 }}
+        {{- include "inboxfm-connect.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -37,7 +37,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "activepieces.serviceAccountName" . }}
+      serviceAccountName: {{ include "inboxfm-connect.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -54,13 +54,13 @@ spec:
             - name: http
               containerPort: {{ .Values.container.port }}
               protocol: TCP
-          {{- if or .Values.activepiecesEnvVariables .Values.activepiecesConfig }}
+          {{- if or .Values.inboxfmConnectEnvVariables .Values.inboxfmConnectConfig }}
           env:
-            {{- range $key, $value := .Values.activepiecesConfig }}
+            {{- range $key, $value := .Values.inboxfmConnectConfig }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-            {{- range $secretName, $vars := .Values.activepiecesEnvVariables }}
+            {{- range $secretName, $vars := .Values.inboxfmConnectEnvVariables }}
             {{- range $vars }}
             - name: {{ . }}
               valueFrom:
@@ -98,7 +98,7 @@ spec:
         {{- if and .Values.persistence.enabled (ne (.Values.workloadType | default "rollout") "statefulset") }}
         - name: cache
           persistentVolumeClaim:
-            claimName: {{ include "activepieces.fullname" . }}-cache
+            claimName: {{ include "inboxfm-connect.fullname" . }}-cache
         {{- end }}
         {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
@@ -131,8 +131,8 @@ spec:
   {{- else }}
   strategy:
     blueGreen:
-      activeService: {{ include "activepieces.fullname" . }}
-      previewService: {{ include "activepieces.fullname" . }}-preview
+      activeService: {{ include "inboxfm-connect.fullname" . }}
+      previewService: {{ include "inboxfm-connect.fullname" . }}-preview
       autoPromotionEnabled: {{ .Values.rollout.blueGreen.autoPromotionEnabled }}
       scaleDownDelaySeconds: {{ .Values.rollout.blueGreen.scaleDownDelaySeconds }}
   {{- end }}

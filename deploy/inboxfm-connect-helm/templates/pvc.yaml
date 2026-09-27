@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "activepieces.fullname" . }}-cache
+  name: {{ include "inboxfm-connect.fullname" . }}-cache
   labels:
-    {{- include "activepieces.labels" . | nindent 4 }}
+    {{- include "inboxfm-connect.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce

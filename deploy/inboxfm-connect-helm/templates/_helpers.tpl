@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "activepieces.name" -}}
+{{- define "inboxfm-connect.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "activepieces.fullname" -}}
+{{- define "inboxfm-connect.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "activepieces.chart" -}}
+{{- define "inboxfm-connect.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "activepieces.labels" -}}
-helm.sh/chart: {{ include "activepieces.chart" . }}
-{{ include "activepieces.selectorLabels" . }}
+{{- define "inboxfm-connect.labels" -}}
+helm.sh/chart: {{ include "inboxfm-connect.chart" . }}
+{{ include "inboxfm-connect.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "activepieces.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "activepieces.name" . }}
+{{- define "inboxfm-connect.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "inboxfm-connect.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "activepieces.serviceAccountName" -}}
+{{- define "inboxfm-connect.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "activepieces.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "inboxfm-connect.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

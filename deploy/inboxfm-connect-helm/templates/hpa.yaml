@@ -2,9 +2,9 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "activepieces.fullname" . }}
+  name: {{ include "inboxfm-connect.fullname" . }}
   labels:
-    {{- include "activepieces.labels" . | nindent 4 }}
+    {{- include "inboxfm-connect.labels" . | nindent 4 }}
 spec:
   # The chart renders an Argo Rollout by default, or a StatefulSet when
   # workloadType=statefulset (see templates/deployment.yaml). The target must
@@ -18,7 +18,7 @@ spec:
     apiVersion: argoproj.io/v1alpha1
     kind: Rollout
     {{- end }}
-    name: {{ include "activepieces.fullname" . }}
+    name: {{ include "inboxfm-connect.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:
