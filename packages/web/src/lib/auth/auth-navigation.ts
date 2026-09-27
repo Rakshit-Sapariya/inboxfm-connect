@@ -1,23 +1,14 @@
-export type NavigationHandler = (
-  path: string,
-  options?: { replace?: boolean; state?: unknown }
-) => void
-
 let navigateHandler: NavigationHandler | null = null
 
-export function setAuthNavigator(handler: NavigationHandler | null): void {
+function setAuthNavigator(handler: NavigationHandler | null): void {
   navigateHandler = handler
 }
 
-export function getAuthNavigator(): NavigationHandler | null {
+function getAuthNavigator(): NavigationHandler | null {
   return navigateHandler
 }
 
-export function navigateToLogin(options?: {
-  returnUrl?: string
-  replace?: boolean
-  state?: unknown
-}): void {
+function navigateToLogin(options?: NavigateToLoginOptions): void {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
   if (currentPath.startsWith('/login')) {
     return
@@ -26,7 +17,7 @@ export function navigateToLogin(options?: {
   const returnUrl =
     options?.returnUrl ??
     (typeof window !== 'undefined'
-      ? `${window.location.pathname}${window.location.search}`
+      ? `${window.location.pathname}${window.location.search}${window.location.hash}`
       : '')
 
   const search =
@@ -48,20 +39,6 @@ export function navigateToLogin(options?: {
   }
 
   if (typeof window !== 'undefined') {
-    const isJsDom =
-      typeof navigator !== 'undefined' &&
-      navigator.userAgent &&
-      navigator.userAgent.includes('jsdom')
-
-    if (isJsDom) {
-      try {
-        window.history.pushState(navOptions.state, '', target)
-      } catch {
-        // ignore in mock environments
-      }
-      return
-    }
-
     try {
       if (typeof window.location.assign === 'function') {
         window.location.assign(target)
@@ -72,4 +49,23 @@ export function navigateToLogin(options?: {
       // In non-browser or stubbed test environments, ignore assign errors
     }
   }
+}
+
+export const authNavigation = {
+  setAuthNavigator,
+  getAuthNavigator,
+  navigateToLogin,
+}
+
+export { setAuthNavigator, getAuthNavigator, navigateToLogin }
+
+export type NavigationHandler = (
+  path: string,
+  options?: { replace?: boolean; state?: unknown }
+) => void
+
+export type NavigateToLoginOptions = {
+  returnUrl?: string
+  replace?: boolean
+  state?: unknown
 }

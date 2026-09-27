@@ -80,6 +80,23 @@ describe('ApiClient', () => {
       )
     })
 
+    it('notifies onUnauthorized listener when 401 response is handled', async () => {
+      const mockUnauthorizedListener = vi.fn()
+      apiClient.setOnUnauthorized(mockUnauthorizedListener)
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ message: 'Session revoked' }),
+      })
+
+      await expect(apiClient.get('/projects')).rejects.toThrow(ApiClientError)
+
+      expect(mockUnauthorizedListener).toHaveBeenCalledTimes(1)
+      apiClient.setOnUnauthorized(null)
+    })
+
     it('does not trigger redirect on 401 from sign-in endpoint (invalid credentials)', async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,

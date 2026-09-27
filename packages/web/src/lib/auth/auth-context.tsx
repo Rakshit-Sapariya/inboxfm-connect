@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const signOut = () => {
+  const resetAuthState = () => {
     apiClient.setToken(null)
     apiClient.setProjectId(null)
     clearPersistedUser()
@@ -53,8 +53,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     setProjects([])
     setCurrentProjectState(null)
+  }
+
+  const signOut = () => {
+    resetAuthState()
     navigateToLogin()
   }
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      resetAuthState()
+    }
+
+    apiClient.setOnUnauthorized(handleUnauthorized)
+    return () => {
+      apiClient.setOnUnauthorized(null)
+    }
+  }, [])
 
   useEffect(() => {
     async function loadSession() {

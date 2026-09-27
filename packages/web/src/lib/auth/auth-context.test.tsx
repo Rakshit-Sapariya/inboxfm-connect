@@ -1,7 +1,8 @@
 import { act } from 'react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/lib/api/client'
 import { AuthProvider, useAuth } from '@/lib/auth/auth-context'
+import { setAuthNavigator } from '@/lib/auth/auth-navigation'
 import { stubApi } from '@/test/api-stub'
 import { mount, waitFor } from '@/test/test-utils'
 
@@ -47,10 +48,12 @@ beforeEach(() => {
   apiClient.setToken(null)
   apiClient.setProjectId(null)
   capturedAuth = null
+  setAuthNavigator(vi.fn())
 })
 
 afterEach(() => {
   localStorage.clear()
+  setAuthNavigator(null)
 })
 
 describe('auth session restore', () => {
@@ -132,5 +135,62 @@ describe('auth session restore', () => {
     expect(localStorage.getItem('ap-token')).toBeNull()
     expect(localStorage.getItem('ap-project-id')).toBeNull()
     expect(capturedAuth?.isAuthenticated).toBe(false)
+  })
+
+  it('signOut navigates to /login', async () => {
+    const mockNavigator = vi.fn()
+    setAuthNavigator(mockNavigator)
+    apiClient.setToken('real-jwt')
+    apiClient.setProjectId(REAL_PROJECT_ID)
+    localStorage.setItem('ap-user', JSON.stringify(REAL_USER))
+
+    stubApi([
+      {
+        match: (url) => url.pathname.endsWith('/api/v1/projects'),
+        respond: () => ({ status: 200, body: { data: [] } }),
+      },
+    ])
+
+    renderAuth()
+    await waitFor(() => capturedAuth?.isLoading === false)
+
+    act(() => {
+      capturedAuth!.signOut()
+    })
+
+    expect(mockNavigator).toHaveBeenCalledWith(
+      expect.stringContaining('/login'),
+      expect.objectContaining({ replace: true })
+    )
+    setAuthNavigator(null)
+  })
+
+  it('resets AuthProvider state immediately when 401 is handled by apiClient', async () => {
+    const mockNavigator = vi.fn()
+    setAuthNavigator(mockNavigator)
+    apiClient.setToken('real-jwt')
+    apiClient.setProjectId(REAL_PROJECT_ID)
+    localStorage.setItem('ap-user', JSON.stringify(REAL_USER))
+
+    stubApi([
+      {
+        match: (url) => url.pathname.endsWith('/api/v1/projects'),
+        respond: () => ({ status: 200, body: { data: [{ id: REAL_PROJECT_ID, displayName: 'InboxFM', platformId: REAL_USER.platformId }] } }),
+      },
+    ])
+
+    renderAuth()
+    await waitFor(() => capturedAuth?.isLoading === false)
+    expect(capturedAuth?.isAuthenticated).toBe(true)
+
+    act(() => {
+      apiClient.handleUnauthorized()
+    })
+
+    expect(capturedAuth?.isAuthenticated).toBe(false)
+    expect(capturedAuth?.user).toBeNull()
+    expect(capturedAuth?.token).toBeNull()
+    expect(capturedAuth?.currentProject).toBeNull()
+    setAuthNavigator(null)
   })
 })

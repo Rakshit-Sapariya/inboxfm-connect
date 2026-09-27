@@ -8,6 +8,34 @@ import { apiClient } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth/auth-context'
 import { toast } from 'sonner'
 
+export function resolvePostLoginTarget(returnUrlParam?: string | null, stateFrom?: unknown): string {
+  let candidate: string | undefined
+
+  if (returnUrlParam && returnUrlParam.startsWith('/') && !returnUrlParam.startsWith('//')) {
+    candidate = returnUrlParam
+  } else if (typeof stateFrom === 'string' && stateFrom.startsWith('/') && !stateFrom.startsWith('//')) {
+    candidate = stateFrom
+  } else if (
+    stateFrom &&
+    typeof stateFrom === 'object' &&
+    'pathname' in stateFrom &&
+    typeof (stateFrom as { pathname: unknown }).pathname === 'string'
+  ) {
+    const fromObj = stateFrom as { pathname: string; search?: string; hash?: string }
+    if (fromObj.pathname.startsWith('/') && !fromObj.pathname.startsWith('//')) {
+      const search = typeof fromObj.search === 'string' ? fromObj.search : ''
+      const hash = typeof fromObj.hash === 'string' ? fromObj.hash : ''
+      candidate = `${fromObj.pathname}${search}${hash}`
+    }
+  }
+
+  if (candidate && !candidate.startsWith('/login')) {
+    return candidate
+  }
+
+  return '/'
+}
+
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -16,12 +44,9 @@ export default function LoginPage() {
   const navigateAfterLogin = () => {
     const searchParams = new URLSearchParams(location.search)
     const returnUrlParam = searchParams.get('returnUrl')
+    const stateFrom = (location.state as { from?: unknown } | null)?.from
 
-    const targetUrl =
-      returnUrlParam && returnUrlParam.startsWith('/') && !returnUrlParam.startsWith('//')
-        ? returnUrlParam
-        : '/'
-
+    const targetUrl = resolvePostLoginTarget(returnUrlParam, stateFrom)
     navigate(targetUrl, { replace: true })
   }
 

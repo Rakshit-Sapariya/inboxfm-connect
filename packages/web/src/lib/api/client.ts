@@ -20,12 +20,17 @@ class ApiClient {
   private token: string | null = null
   private projectId: string | null = null
   private isRedirectingToLogin = false
+  private onUnauthorized: (() => void) | null = null
 
   constructor() {
     if (typeof localStorage !== 'undefined') {
       this.token = localStorage.getItem('ap-token')
       this.projectId = localStorage.getItem('ap-project-id')
     }
+  }
+
+  setOnUnauthorized(handler: (() => void) | null): void {
+    this.onUnauthorized = handler
   }
 
   resetRedirectState(): void {
@@ -47,6 +52,14 @@ class ApiClient {
     this.setProjectId(null)
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('ap-user')
+    }
+
+    if (this.onUnauthorized) {
+      try {
+        this.onUnauthorized()
+      } catch {
+        // guard against listener errors
+      }
     }
 
     try {

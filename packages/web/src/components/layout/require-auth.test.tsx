@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, type Location } from 'react-router-dom'
 import { RequireAuth } from './require-auth'
 import { mount } from '@/test/test-utils'
 
@@ -34,7 +34,7 @@ describe('RequireAuth', () => {
       isLoading: false,
     })
 
-    let capturedLocation: any = null
+    let capturedLocation: Location | null = null
 
     function LoginProbe() {
       capturedLocation = useLocation()
@@ -59,8 +59,13 @@ describe('RequireAuth', () => {
 
     expect(container.textContent).toContain('Login Page')
     expect(container.textContent).not.toContain('Protected Content')
-    expect(capturedLocation?.pathname).toBe('/login')
-    expect(capturedLocation?.state?.from?.pathname).toBe('/connections')
+    expect(capturedLocation).not.toBeNull()
+    const probeLocation = capturedLocation as unknown as {
+      pathname: string
+      state: { from?: { pathname: string } } | null
+    }
+    expect(probeLocation.pathname).toBe('/login')
+    expect(probeLocation.state?.from?.pathname).toBe('/connections')
   })
 
   it('renders children when user is authenticated', () => {
