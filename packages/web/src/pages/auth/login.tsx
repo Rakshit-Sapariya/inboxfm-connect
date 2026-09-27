@@ -1,6 +1,6 @@
 import { Lock, Mail } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,20 @@ import { toast } from 'sonner'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { signIn } = useAuth()
+
+  const navigateAfterLogin = () => {
+    const from = (location.state as { from?: { pathname?: string; search?: string } } | undefined)?.from
+    const searchParams = new URLSearchParams(location.search)
+    const returnUrlParam = searchParams.get('returnUrl')
+
+    const targetUrl = from
+      ? `${from.pathname ?? '/'}${from.search ?? ''}`
+      : returnUrlParam || '/'
+
+    navigate(targetUrl, { replace: true })
+  }
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -41,7 +54,7 @@ export default function LoginPage() {
       const { token, projectId, ...user } = res
       signIn(token, user, projectId)
       toast.success('Signed in successfully')
-      navigate('/')
+      navigateAfterLogin()
     } catch (err) {
       toast.error('Authentication failed', {
         description: err instanceof Error ? err.message : 'Invalid credentials',
@@ -69,7 +82,7 @@ export default function LoginPage() {
       const { token, projectId, ...user } = res
       signIn(token, user, projectId)
       toast.success('Signed in as Dev user')
-      navigate('/')
+      navigateAfterLogin()
     } catch (err) {
       toast.error('Dev authentication failed', {
         description: err instanceof Error ? err.message : 'Invalid dev credentials',

@@ -123,13 +123,16 @@ describe('router', () => {
     expect(document.body.querySelector('a[href="/login"]')).not.toBeNull()
   }, 15000)
 
-  it('redirects unauthenticated users to the /login page', async () => {
+  it('redirects unauthenticated users to the /login page preserving return URL', async () => {
     signOutTestUser()
-    const container = await navigateAndMount('/')
+    const container = await navigateAndMount('/connections')
 
     await waitFor(() => document.body.textContent?.includes('Sign in') === true)
 
     expect(router.state.location.pathname).toBe('/login')
+    expect(router.state.location.state).toEqual({
+      from: expect.objectContaining({ pathname: '/connections' }),
+    })
     expect(container.querySelector('aside')).toBeNull()
   }, 15000)
 

@@ -1,12 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient, ApiClientError } from './client'
+import { setAuthNavigator } from '../auth/auth-navigation'
 
 describe('ApiClient', () => {
+  const mockNavigator = vi.fn()
+
   beforeEach(() => {
     localStorage.clear()
     apiClient.setToken(null)
     apiClient.setProjectId(null)
+    apiClient.resetRedirectState()
+    mockNavigator.mockClear()
+    setAuthNavigator(mockNavigator)
     vi.restoreAllMocks()
+    window.history.pushState({}, '', '/dashboard')
   })
 
   it('should initialize with null token and project', () => {
@@ -46,5 +53,82 @@ describe('ApiClient', () => {
 
     const result = await apiClient.get('/test')
     expect(result).toEqual(mockData)
+  })
+
+  describe('401 Unauthorized handling (#173)', () => {
+    it('redirects to /login and clears stored auth state on 401 response', async () => {
+      apiClient.setToken('expired_token')
+      apiClient.setProjectId('proj_123')
+      localStorage.setItem('ap-user', JSON.stringify({ email: 'test@ap.com' }))
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ message: 'Token expired' }),
+      })
+
+      await expect(apiClient.get('/projects')).rejects.toThrow(ApiClientError)
+
+      expect(apiClient.getToken()).toBeNull()
+      expect(apiClient.getProjectId()).toBeNull()
+      expect(localStorage.getItem('ap-user')).toBeNull()
+      expect(mockNavigator).toHaveBeenCalledTimes(1)
+      expect(mockNavigator).toHaveBeenCalledWith(
+        expect.stringContaining('/login'),
+        expect.objectContaining({ replace: true })
+      )
+    })
+
+    it('does not trigger redirect on 401 from sign-in endpoint (invalid credentials)', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ message: 'Invalid credentials' }),
+      })
+
+      await expect(
+        apiClient.post('/authentication/sign-in', { email: 'bad@ap.com', password: 'wrong' })
+      ).rejects.toThrow(ApiClientError)
+
+      expect(mockNavigator).not.toHaveBeenCalled()
+    })
+
+    it('handles concurrent 401 responses and triggers navigation exactly once without loops', async () => {
+      apiClient.setToken('expired_token')
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ message: 'Unauthorized' }),
+      })
+
+      const requests = [
+        apiClient.get('/projects').catch(() => null),
+        apiClient.get('/connections').catch(() => null),
+        apiClient.get('/executions').catch(() => null),
+      ]
+
+      await Promise.all(requests)
+
+      expect(mockNavigator).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not trigger redirect if already on /login', async () => {
+      window.history.pushState({}, '', '/login')
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ message: 'Unauthorized' }),
+      })
+
+      await expect(apiClient.get('/some-route')).rejects.toThrow(ApiClientError)
+
+      expect(mockNavigator).not.toHaveBeenCalled()
+    })
   })
 })

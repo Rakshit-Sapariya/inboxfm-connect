@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { apiClient } from '../api/client'
 import { Project, User } from '../api/types'
+import { navigateToLogin } from './auth-navigation'
 
 interface AuthContextType {
   user: User | null
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     setProjects([])
     setCurrentProjectState(null)
+    navigateToLogin()
   }
 
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { navigateToLogin } from '../auth/auth-navigation'
+
 export class ApiClientError extends Error {
   constructor(
     public readonly statusCode: number,
@@ -17,11 +19,42 @@ class ApiClient {
   private baseUrl = '/api/v1'
   private token: string | null = null
   private projectId: string | null = null
+  private isRedirectingToLogin = false
 
   constructor() {
     if (typeof localStorage !== 'undefined') {
       this.token = localStorage.getItem('ap-token')
       this.projectId = localStorage.getItem('ap-project-id')
+    }
+  }
+
+  resetRedirectState(): void {
+    this.isRedirectingToLogin = false
+  }
+
+  handleUnauthorized(): void {
+    if (this.isRedirectingToLogin) {
+      return
+    }
+
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+    if (currentPath.startsWith('/login')) {
+      return
+    }
+
+    this.isRedirectingToLogin = true
+    this.setToken(null)
+    this.setProjectId(null)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('ap-user')
+    }
+
+    try {
+      navigateToLogin()
+    } finally {
+      setTimeout(() => {
+        this.isRedirectingToLogin = false
+      }, 100)
     }
   }
 
@@ -114,6 +147,9 @@ class ApiClient {
     }
 
     if (!response.ok) {
+      if (response.status === 401 && !path.includes('/authentication/sign-in')) {
+        this.handleUnauthorized()
+      }
       const errorMessage =
         (responseData as { message?: string })?.message ||
         `Request failed with status ${response.status}`
