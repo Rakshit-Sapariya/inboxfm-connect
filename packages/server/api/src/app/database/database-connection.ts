@@ -59,7 +59,7 @@ import { createPostgresDataSource } from './postgres-connection'
 
 const databaseType = system.get(AppSystemProp.DB_TYPE)
 
-function getEntities(): EntitySchema<unknown>[] {
+export function getEntities(): EntitySchema<unknown>[] {
     return [
         ExecutionEntity,
         ToolCallEntity,

@@ -3,6 +3,9 @@ name: Setup Environment
 on:
   pull_request:
     types: [opened, reopened, synchronize, edited, closed, labeled]
+  push:
+    branches:
+      - dev
   workflow_dispatch:
 
 concurrency:
@@ -28,7 +31,7 @@ jobs:
     # (preview.activepieces.dev). This fork has no PREVIEW_* secrets, so the
     # job stays disabled (gated on secret presence rather than a repo check)
     # until preview infra is configured.
-    if: needs.check-preview-secret.outputs.configured == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: needs.check-preview-secret.outputs.configured == 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     env:
       NX_NO_CLOUD: true 
     steps:

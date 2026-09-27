@@ -27,6 +27,7 @@ import { agentService } from '../../../../src/app/agents/agent.service'
 import { appConnectionService } from '../../../../src/app/app-connection/app-connection-service/app-connection-service'
 import { mcpServerRepository, mcpServerService } from '../../../../src/app/mcp/mcp-service'
 import { userInteractionWatcher } from '../../../../src/app/helper/user-interaction/user-interaction-watcher'
+import { projectRepo } from '../../../../src/app/project/project-repo'
 import { mockAndSaveAIProvider } from '../../../helpers/mocks'
 import { createMemberContext, createTestContext, TestContext } from '../../../helpers/test-context'
 import { setupTestEnvironment, teardownTestEnvironment } from '../../../helpers/test-setup'
@@ -858,6 +859,7 @@ describe('Project Replace API (CE)', () => {
 
         it('should reject non-platform-admin applying plan with deployCustomIntegrations', async () => {
             const operatorCtx = await createMemberContext(app!, ctx, { projectRole: DefaultProjectRole.ADMIN })
+            await projectRepo().update({ id: ctx.project.id, platformId: ctx.platform.id }, { ownerId: operatorCtx.user.id })
 
             const snapshot: ProjectStateSnapshot = {
                 schemaVersion: 1,

@@ -2,11 +2,6 @@ import { Agent, Platform, Project } from '@inboxfm-connect/shared'
 import { EntitySchema } from 'typeorm'
 import { ApIdSchema, BaseColumnSchemaPart } from '../database/database-common'
 
-export type AgentSchema = Agent & {
-    project: Project
-    platform: Platform
-}
-
 export const AgentEntity = new EntitySchema<AgentSchema>({
     name: 'agent',
     columns: {
@@ -47,6 +42,7 @@ export const AgentEntity = new EntitySchema<AgentSchema>({
         tools: {
             type: 'jsonb',
             nullable: false,
+            default: () => '\'[]\'',
         },
         structuredOutput: {
             type: 'jsonb',
@@ -96,3 +92,8 @@ export const AgentEntity = new EntitySchema<AgentSchema>({
         },
     },
 })
+
+export type AgentSchema = Agent & {
+    project?: Project
+    platform?: Platform
+}

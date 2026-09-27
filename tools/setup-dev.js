@@ -36,7 +36,10 @@ try {
   }
 }
 
-execSync('bun install', { stdio: 'inherit' });
+execSync('bun install --frozen-lockfile', {
+  stdio: 'inherit',
+  env: { ...process.env, REDISMS_VERSION: process.env.REDISMS_VERSION || '7.4.0' },
+});
 
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'framework', 'common']);
 
@@ -66,7 +69,7 @@ const devPieces = process.env.AP_DEV_PIECES || envConfig.AP_DEV_PIECES;
 
 if (devPieces) {
   const pieceNames = [...new Set(devPieces.split(',').map(n => n.trim()))];
-  const allFolders = findAllPieceFolders(path.resolve('packages', 'pieces'));
+  const allFolders = findAllPieceFolders(path.resolve('packages', 'integrations'));
 
   const pieceFilters = pieceNames.map(name => {
     const dir = allFolders.find(p => p.endsWith(path.sep + name));

@@ -2,7 +2,7 @@
 
 Node/browser client for the Inboxfm Connect API.
 
-Install with `npm install @inboxfm-connect/sdk`. The package supports Node.js 20 or newer and browsers with `fetch` and `AbortController`. It has ESM and CommonJS entry points; the published tarball contains compiled JavaScript, type declarations, this README, the changelog, and the MIT license.
+Install with `npm install @inboxfm-connect/sdk`. The package supports Node.js 20 or newer and browsers with `fetch` and `AbortController`. It has ESM and CommonJS entry points; the published tarball contains compiled JavaScript, type declarations, this README, the changelog, and the preserved upstream license notice. The SDK is outside the restricted Enterprise directories; see [the repository licensing guide](../../LICENSING.md) for the scope of the upstream MIT and Enterprise terms.
 
 ```ts
 import { ConnectError, InboxFM } from '@inboxfm-connect/sdk'

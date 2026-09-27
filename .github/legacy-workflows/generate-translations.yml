@@ -21,7 +21,8 @@ jobs:
           echo "discord_configured=${{ secrets.DISCORD_ON_CALL_WEBHOOK != '' }}" >> "$GITHUB_OUTPUT"
 
   shard-0:
-    if: github.repository == 'Mihir-Rabari/inboxfm-connect'
+    needs: check-secrets
+    if: needs.check-secrets.outputs.crowdin_configured == 'true' && github.repository == 'Mihir-Rabari/inboxfm-connect'
     uses: ./.github/workflows/reusable-generate-translations-shard.yml
     with:
       shard_index: 0
@@ -30,8 +31,8 @@ jobs:
     secrets: inherit
 
   shard-1:
-    if: github.repository == 'Mihir-Rabari/inboxfm-connect'
-    needs: shard-0
+    needs: [check-secrets, shard-0]
+    if: needs.check-secrets.outputs.crowdin_configured == 'true' && github.repository == 'Mihir-Rabari/inboxfm-connect'
     uses: ./.github/workflows/reusable-generate-translations-shard.yml
     with:
       shard_index: 1
@@ -40,8 +41,8 @@ jobs:
     secrets: inherit
 
   shard-2:
-    if: github.repository == 'Mihir-Rabari/inboxfm-connect'
-    needs: shard-1
+    needs: [check-secrets, shard-1]
+    if: needs.check-secrets.outputs.crowdin_configured == 'true' && github.repository == 'Mihir-Rabari/inboxfm-connect'
     uses: ./.github/workflows/reusable-generate-translations-shard.yml
     with:
       shard_index: 2
@@ -50,8 +51,8 @@ jobs:
     secrets: inherit
 
   shard-3:
-    if: github.repository == 'Mihir-Rabari/inboxfm-connect'
-    needs: shard-2
+    needs: [check-secrets, shard-2]
+    if: needs.check-secrets.outputs.crowdin_configured == 'true' && github.repository == 'Mihir-Rabari/inboxfm-connect'
     uses: ./.github/workflows/reusable-generate-translations-shard.yml
     with:
       shard_index: 3
@@ -60,8 +61,8 @@ jobs:
     secrets: inherit
 
   shard-4:
-    if: github.repository == 'Mihir-Rabari/inboxfm-connect'
-    needs: shard-3
+    needs: [check-secrets, shard-3]
+    if: needs.check-secrets.outputs.crowdin_configured == 'true' && github.repository == 'Mihir-Rabari/inboxfm-connect'
     uses: ./.github/workflows/reusable-generate-translations-shard.yml
     with:
       shard_index: 4
@@ -70,8 +71,8 @@ jobs:
     secrets: inherit
 
   shard-5:
-    if: github.repository == 'Mihir-Rabari/inboxfm-connect'
-    needs: shard-4
+    needs: [check-secrets, shard-4]
+    if: needs.check-secrets.outputs.crowdin_configured == 'true' && github.repository == 'Mihir-Rabari/inboxfm-connect'
     uses: ./.github/workflows/reusable-generate-translations-shard.yml
     with:
       shard_index: 5
