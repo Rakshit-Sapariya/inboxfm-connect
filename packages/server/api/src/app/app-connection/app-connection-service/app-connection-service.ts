@@ -120,7 +120,16 @@ export const appConnectionService = (log: FastifyBaseLogger) => ({
             ...spreadIfDefined('preSelectForNewProjects', request.preSelectForNewProjects),
         })
 
-        const updatedConnection = await appConnectionsRepo().findOneByOrFail(filter)
+        const updatedConnection = await appConnectionsRepo().findOneBy(filter)
+        if (isNil(updatedConnection)) {
+            throw new ActivepiecesError({
+                code: ErrorCode.ENTITY_NOT_FOUND,
+                params: {
+                    entityType: 'AppConnection',
+                    entityId: id,
+                },
+            })
+        }
         return this.removeSensitiveData(updatedConnection)
     },
     async getOne({
