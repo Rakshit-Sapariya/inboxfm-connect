@@ -1,6 +1,7 @@
 {
   "name": "activepieces",
   "version": "0.86.1",
+  "description": "Integration infrastructure for AI agents and SaaS products: embedded account connections, tool discovery, and action execution.",
   "packageManager": "bun@1.3.3",
   "trustedDependencies": [
     "sqlite3",
