@@ -17,7 +17,7 @@ import { AppSystemProp } from '../helper/system/system-props'
 // request.log — they get the same structured root logger the request hook builds.
 const runtimeLog = apLogger.create({ bindings: {} })
 
-const runtime = new HeadlessRuntime<AppConnectionSchema>({
+export const executeRuntime = new HeadlessRuntime<AppConnectionSchema>({
     basePath: process.cwd(),
     log: runtimeLog,
     getSettings: () => ({
@@ -70,7 +70,7 @@ export const executeController: FastifyPluginAsyncZod = async (fastify) => {
             pieceName: request.body.integration,
         })
 
-        const { data, error } = await tryCatch(() => runtime.execute({
+        const { data, error } = await tryCatch(() => executeRuntime.execute({
             integration: request.body.integration,
             tool: request.body.tool,
             connectionId,

@@ -108,7 +108,8 @@
                   "group": "Connect SDK",
                   "pages": [
                      "connect-sdk/overview",
-                     "connect-sdk/reference"
+                     "connect-sdk/reference",
+                     "connect-sdk/mcp-delegation"
                   ]
                },
                {

@@ -28,3 +28,19 @@ export type Tool = ToolContract & {
 export type IntegrationToolsResponse = {
     actions: Record<string, ToolContract & { props: Record<string, ToolInputContract> }>
 }
+
+export type CreateMcpTokenRequestContract = {
+    projectId: string
+    externalUserId: string
+    allowedPieceNames?: string[]
+    expiresInSeconds?: number
+}
+
+export type CreateMcpTokenResponseContract = {
+    token: string
+    mcpServerUrl: string
+    expiresAt: string
+    projectId: string
+    externalUserId: string
+    allowedPieceNames: string[] | null
+}
