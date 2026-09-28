@@ -371,7 +371,7 @@ describe('InboxFM.createMcpToken', () => {
 
     it('creates a bounded delegated MCP token for an external user', async () => {
         const expectedResponse = {
-            token: 'mcp_jwt_token_123',
+            token: 'mock-mcp-token',
             mcpServerUrl: 'https://api.example.com/mcp',
             expiresAt: '2026-09-28T21:00:00.000Z',
             projectId: 'project-a',
