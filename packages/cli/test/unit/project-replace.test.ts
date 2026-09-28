@@ -164,6 +164,24 @@ describe('CLI project-replace Command', () => {
             ])
         })
 
+        it('ignores malformed non-string items in mappings array', () => {
+            const out: any[] = []
+            parseProviderMappingContent(
+                JSON.stringify({
+                    mappings: [
+                        { sourceProvider: 'valid_src', destProvider: 'valid_dest' },
+                        { sourceProvider: 123, destProvider: 'bad_src' },
+                        { sourceProvider: 'bad_dest', destProvider: true },
+                        { sourceProvider: null, destProvider: {} },
+                    ],
+                }),
+                out,
+            )
+            expect(out).toEqual([
+                { sourceProvider: 'valid_src', destProvider: 'valid_dest' },
+            ])
+        })
+
         it('parses provider mappings from INBOXFM_PROVIDER_MAPPINGS environment variable', () => {
             process.env.INBOXFM_PROVIDER_MAPPINGS = JSON.stringify([
                 { sourceProvider: 'env_source', destProvider: 'env_dest' },

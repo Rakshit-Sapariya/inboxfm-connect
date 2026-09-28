@@ -132,7 +132,7 @@ export function parseProviderMappingContent(content: string, out: ProviderMappin
     const parsed = JSON.parse(content)
     if (Array.isArray(parsed)) {
         for (const item of parsed) {
-            if (item && item.sourceProvider && item.destProvider) {
+            if (item && typeof item === 'object' && typeof item.sourceProvider === 'string' && typeof item.destProvider === 'string') {
                 out.push({
                     sourceProvider: item.sourceProvider,
                     destProvider: item.destProvider,
@@ -144,7 +144,11 @@ export function parseProviderMappingContent(content: string, out: ProviderMappin
         if (Array.isArray((parsed as Record<string, unknown>).mappings)) {
             for (const item of (parsed as Record<string, unknown>).mappings as unknown[]) {
                 if (item && typeof item === 'object' && 'sourceProvider' in item && 'destProvider' in item) {
-                    out.push(item as ProviderMappingSchema)
+                    const sp = (item as Record<string, unknown>).sourceProvider
+                    const dp = (item as Record<string, unknown>).destProvider
+                    if (typeof sp === 'string' && typeof dp === 'string') {
+                        out.push({ sourceProvider: sp, destProvider: dp })
+                    }
                 }
             }
         }
@@ -154,7 +158,10 @@ export function parseProviderMappingContent(content: string, out: ProviderMappin
                     out.push({ sourceProvider: key, destProvider: val })
                 }
                 else if (typeof val === 'object' && val !== null && 'destProvider' in val) {
-                    out.push({ sourceProvider: key, destProvider: (val as { destProvider: string }).destProvider })
+                    const dp = (val as Record<string, unknown>).destProvider
+                    if (typeof dp === 'string') {
+                        out.push({ sourceProvider: key, destProvider: dp })
+                    }
                 }
             }
         }
