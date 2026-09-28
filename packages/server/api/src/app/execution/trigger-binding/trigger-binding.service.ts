@@ -262,10 +262,12 @@ export const triggerBindingService = {
 
 async function syncTriggerSchedule(binding: TriggerBinding): Promise<void> {
     const cronExpr = typeof binding.settings?.cronExpression === 'string' ? binding.settings.cronExpression : null
+    const timezone = typeof binding.settings?.timezone === 'string' ? binding.settings.timezone : 'UTC'
     if (cronExpr) {
         await scheduler.cron({
             name: `trigger-cron-${binding.id}`,
             cronExpression: cronExpr,
+            timezone,
             fn: async () => {
                 await triggerBindingService.executeRun({ id: binding.id })
             },
@@ -278,6 +280,7 @@ async function syncTriggerSchedule(binding: TriggerBinding): Promise<void> {
             await scheduler.cron({
                 name: `trigger-renew-${binding.id}`,
                 cronExpression: renewCron,
+                timezone,
                 fn: async () => {
                     await triggerBindingService.renew({ id: binding.id, projectId: binding.projectId, platformId: binding.platformId })
                 },
