@@ -1,11 +1,12 @@
 import { AIProviderName, apId } from '@inboxfm-connect/core-utils'
-import { PrincipalType } from '@inboxfm-connect/shared'
+import { DefaultProjectRole, PrincipalType } from '@inboxfm-connect/shared'
 import { FastifyInstance } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { generateMockToken } from '../../../helpers/auth'
 import { db } from '../../../helpers/db'
 import { mockAndSaveAIProvider } from '../../../helpers/mocks'
-import { createTestContext, TestContext } from '../../../helpers/test-context'
+import { createMemberContext, createTestContext, TestContext } from '../../../helpers/test-context'
 import { setupTestEnvironment, teardownTestEnvironment } from '../../../helpers/test-setup'
 
 let app: FastifyInstance | null = null
@@ -51,6 +52,35 @@ describe('AI Providers API', () => {
                 'X-Organization-Id': 'org-123',
                 'X-Tenant': 'tenant-abc',
             })
+        })
+
+        it('rejects provider creation from non-admin platform members with 403 Forbidden', async () => {
+            const memberCtx = await createMemberContext(app!, ctx, {
+                projectRole: DefaultProjectRole.ADMIN,
+            })
+            const response = await memberCtx.post('/v1/ai-providers', {
+                provider: AIProviderName.CUSTOM,
+                displayName: 'Member Custom Provider',
+                config: {
+                    baseUrl: 'https://api.example.com/v1',
+                    apiKeyHeader: 'Authorization',
+                    models: [],
+                },
+                auth: { apiKey: 'test-key' },
+            })
+            expect(response?.statusCode).toBe(StatusCodes.FORBIDDEN)
+        })
+
+        it('rejects Azure provider with host-manipulating resourceName', async () => {
+            const response = await ctx.post('/v1/ai-providers', {
+                provider: AIProviderName.AZURE_OPENAI,
+                displayName: 'Malicious Azure',
+                config: {
+                    resourceName: 'evil.com#',
+                },
+                auth: { apiKey: 'test-key' },
+            })
+            expect(response?.statusCode).toBe(StatusCodes.BAD_REQUEST)
         })
     })
 

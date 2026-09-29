@@ -5,7 +5,7 @@ import { FastifyBaseLogger } from 'fastify'
 import { In, LessThanOrEqual } from 'typeorm'
 import { repoFactory } from '../core/db/repo-factory'
 import { exceptionHandler } from '../helper/exception-handler'
-import { jwtUtils } from '../helper/jwt-utils'
+import { JwtAudience, JwtSignAlgorithm, jwtUtils } from '../helper/jwt-utils'
 import { system } from '../helper/system/system'
 import { AppSystemProp } from '../helper/system/system-props'
 import { fileCompressor } from './file-compressor'
@@ -202,6 +202,8 @@ export const fileService = (log: FastifyBaseLogger) => ({
             const decodedToken = await jwtUtils.decodeAndVerify<FileToken>({
                 jwt: token,
                 key: await jwtUtils.getJwtSecret(),
+                algorithm: JwtSignAlgorithm.HS256,
+                audience: JwtAudience.FILE_READ,
             })
             const fileType = decodedToken.fileType ?? FileType.FLOW_STEP_FILE
             if (!ALLOWED_SIGNED_FILE_TYPES.includes(fileType)) {

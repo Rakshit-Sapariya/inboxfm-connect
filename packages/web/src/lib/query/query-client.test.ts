@@ -66,6 +66,21 @@ describe('QueryClient Error Handling & Toast Feedback (Issue #29 / DESIGN_SYSTEM
     })
   })
 
+  it('does NOT trigger sonner toast error when a query explicitly disables showErrorDialog', async () => {
+    const error = new ApiClientError(500, 'Silent Dialog Failure')
+
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: ['silent-dialog-fail-test'],
+        queryFn: () => Promise.reject(error),
+        meta: { showErrorDialog: false },
+        retry: false,
+      })
+    ).rejects.toThrow()
+
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('does NOT trigger sonner toast error when a query explicitly disables showErrorToast', async () => {
     const error = new ApiClientError(500, 'Silent Failure')
 

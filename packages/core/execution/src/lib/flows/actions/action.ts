@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { STEP_NAME_REGEX } from '@inboxfm-connect/core-utils'
+import { formErrors, STEP_NAME_REGEX } from '@inboxfm-connect/core-utils'
 import { VersionType } from '@inboxfm-connect/core-piece-types'
 import { PropertySettings } from '../properties'
 import { SampleDataSetting } from '../sample-data'
@@ -193,8 +193,8 @@ const BranchOperatorSingleValueLiterals = [
 
 function buildBranchTextConditionValid(addMinLength: boolean) {
     return z.object({
-        firstValue: addMinLength ? z.string().min(1) : z.string(),
-        secondValue: addMinLength ? z.string().min(1) : z.string(),
+        firstValue: addMinLength ? z.string().min(1, formErrors.required) : z.string(),
+        secondValue: addMinLength ? z.string().min(1, formErrors.required) : z.string(),
         caseSensitive: z.boolean().optional(),
         operator: z.union(BranchOperatorTextLiterals).optional(),
     })
@@ -202,23 +202,23 @@ function buildBranchTextConditionValid(addMinLength: boolean) {
 
 function buildBranchNumberConditionValid(addMinLength: boolean) {
     return z.object({
-        firstValue: addMinLength ? z.string().min(1) : z.string(),
-        secondValue: addMinLength ? z.string().min(1) : z.string(),
+        firstValue: addMinLength ? z.string().min(1, formErrors.required) : z.string(),
+        secondValue: addMinLength ? z.string().min(1, formErrors.required) : z.string(),
         operator: z.union(BranchOperatorNumberLiterals).optional(),
     })
 }
 
 function buildBranchDateConditionValid(addMinLength: boolean) {
     return z.object({
-        firstValue: addMinLength ? z.string().min(1) : z.string(),
-        secondValue: addMinLength ? z.string().min(1) : z.string(),
+        firstValue: addMinLength ? z.string().min(1, formErrors.required) : z.string(),
+        secondValue: addMinLength ? z.string().min(1, formErrors.required) : z.string(),
         operator: z.union(BranchOperatorDateLiterals).optional(),
     })
 }
 
 function buildBranchSingleValueConditionValid(addMinLength: boolean) {
     return z.object({
-        firstValue: addMinLength ? z.string().min(1) : z.string(),
+        firstValue: addMinLength ? z.string().min(1, formErrors.required) : z.string(),
         operator: z.union(BranchOperatorSingleValueLiterals).optional(),
     })
 }
@@ -234,10 +234,6 @@ function buildBranchConditionValid(addMinLength: boolean) {
 
 export const ValidBranchCondition = buildBranchConditionValid(true)
 export type ValidBranchCondition = z.infer<typeof ValidBranchCondition>
-
-// TODO remove this and use ValidBranchCondition everywhere
-export const BranchCondition = buildBranchConditionValid(false)
-export type BranchCondition = z.infer<typeof BranchCondition>
 
 export const BranchTextCondition = buildBranchTextConditionValid(false)
 export type BranchTextCondition = z.infer<typeof BranchTextCondition>

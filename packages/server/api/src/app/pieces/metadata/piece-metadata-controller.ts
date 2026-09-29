@@ -147,6 +147,10 @@ type PieceCursorPayload = {
     queryHash?: string
 }
 
+function normalizeBooleanFlag(val: unknown): boolean {
+    return val === true || val === 'true'
+}
+
 function computeQueryFingerprint(query?: Record<string, unknown>): string {
     if (!query) {
         return ''
@@ -162,8 +166,8 @@ function computeQueryFingerprint(query?: Record<string, unknown>): string {
         'projectId',
     ]
     const normalized: Record<string, unknown> = {
-        includeHidden: Boolean(query.includeHidden),
-        includeTags: Boolean(query.includeTags),
+        includeHidden: normalizeBooleanFlag(query.includeHidden),
+        includeTags: normalizeBooleanFlag(query.includeTags),
     }
     for (const key of relevantKeys.sort()) {
         const val = query[key]
@@ -378,3 +382,12 @@ const DeletePieceRequest = {
         }),
     },
 }
+
+export const pieceMetadataTesting = {
+    computeQueryFingerprint,
+    paginatePieces,
+    decodePieceCursor,
+    encodePieceCursor,
+    normalizeBooleanFlag,
+}
+
