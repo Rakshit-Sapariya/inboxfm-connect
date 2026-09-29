@@ -2,7 +2,27 @@
 
 Node/browser client for the Inboxfm Connect API.
 
-Install with `npm install @inboxfm-connect/sdk`. The package supports Node.js 20 or newer and browsers with `fetch` and `AbortController`. It has ESM and CommonJS entry points; the published tarball contains compiled JavaScript, type declarations, this README, the changelog, and the preserved upstream license notice. The SDK is outside the restricted Enterprise directories; see [the repository licensing guide](../../LICENSING.md) for the scope of the upstream MIT and Enterprise terms.
+The SDK supplies the developer-facing account connection → tool discovery → action execution cycle described in the [product direction](../../docs/PRODUCT_DIRECTION.md). Keep project API keys on your application's backend; a browser-compatible bundle does not make those keys safe to expose to customers.
+
+The package supports Node.js 20 or newer and browsers with `fetch` and `AbortController`. It has ESM and CommonJS entry points; its tarball contains compiled JavaScript, type declarations, this README, the changelog, and the preserved upstream license notice. The SDK is outside the restricted Enterprise directories; see [the repository licensing guide](../../LICENSING.md) for the scope of the upstream MIT and Enterprise terms.
+
+## Installation during the development preview
+
+A public npm lookup for `@inboxfm-connect/sdk` returned 404 on September 27, 2026. Until a public release is confirmed, use the repository workspace or build a local tarball. From the repository root, with dependencies installed using the pinned toolchain:
+
+```bash
+bun x turbo run build --filter=@inboxfm-connect/sdk
+npm pack --workspace=@inboxfm-connect/sdk --pack-destination /absolute/path/to/your-app
+```
+
+In your consuming application, install the tarball emitted by `npm pack` (use its actual filename):
+
+```bash
+# Replace VERSION with the version in the filename emitted by npm pack.
+npm install ./inboxfm-connect-sdk-VERSION.tgz
+```
+
+The repository's runnable quickstart uses the workspace directly. After a public release is confirmed, `npm install @inboxfm-connect/sdk` becomes the normal consumer path. Track release readiness in [#32](https://github.com/Mihir-Rabari/inboxfm-connect/issues/32).
 
 ```ts
 import { ConnectError, InboxFM } from '@inboxfm-connect/sdk'
@@ -19,6 +39,9 @@ const session = await inboxfm.createConnectSession({ externalUserId: 'user_42', 
 // 2. Once they have, find their connection (paginate with `cursor`/`limit`).
 const { data } = await inboxfm.listConnections({ externalUserId: 'user_42', pieceName: '@inboxfm-connect/piece-slack' })
 
+const connection = data.find((candidate) => candidate.status === 'ACTIVE')
+if (!connection) throw new Error('Connect or reconnect this customer before executing a tool')
+
 // 3. Discover the integration's tools and their inputs.
 const tools = await inboxfm.listTools({ integration: '@inboxfm-connect/piece-slack' })
 
@@ -26,7 +49,7 @@ const tools = await inboxfm.listTools({ integration: '@inboxfm-connect/piece-sla
 const output = await inboxfm.execute({
   integration: '@inboxfm-connect/piece-slack',
   tool: 'send_channel_message',
-  connectionId: data[0].id,
+  connectionId: connection.id,
   input: { channel: 'C123', text: 'Hello', sendAsBot: true },
 })
 ```

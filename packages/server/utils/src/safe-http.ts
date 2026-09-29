@@ -5,7 +5,7 @@ import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios'
 import axiosRetry from 'axios-retry'
 import { RequestFilteringHttpAgent, RequestFilteringHttpsAgent } from 'request-filtering-agent'
 
-function parseAllowListFromEnv(): string[] {
+export function parseAllowListFromEnv(): string[] {
     const raw = process.env['AP_SSRF_ALLOW_LIST']
     if (!raw) return []
     return raw.split(',').map((s) => s.trim()).filter(Boolean)
@@ -44,12 +44,19 @@ function attachSsrfErrorInterceptor(instance: AxiosInstance): AxiosInstance {
     return instance
 }
 
+// Issue #371: axios's default is NO timeout, so any safeHttp caller that forgets
+// an explicit timeout can hang its request handler indefinitely on a stalled
+// upstream. Bound that here with a conservative default; an explicit caller
+// value still wins because ...config spreads after it.
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+
 function createAxios(config?: AxiosRequestConfig, { httpsAgentOptions }: SafeAxiosOptions = {}): AxiosInstance {
     const { httpAgent, httpsAgent } = buildAgents({
         allowList: parseAllowListFromEnv(),
         httpsAgentOptions,
     })
     return attachSsrfErrorInterceptor(axios.create({
+        timeout: DEFAULT_REQUEST_TIMEOUT_MS,
         ...config,
         httpAgent,
         httpsAgent,

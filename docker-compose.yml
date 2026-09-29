@@ -1,22 +1,58 @@
 services:
-  app:
-    image: ghcr.io/activepieces/activepieces:0.86.1
-    container_name: activepieces-app
+  proxy:
+    image: nginx:1.30.5-alpine
+    container_name: inboxfm-proxy
     restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
     ports:
       - '8080:80'
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/_gateway/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - activepieces
+  app:
+    image: inboxfm-connect:local
+    container_name: activepieces-app
+    restart: unless-stopped
+    expose:
+      - '80'
     depends_on:
       - postgres
       - redis
+    healthcheck:
+      # The app image ships curl, not wget: a wget probe exits 127, so the app
+      # never turns healthy and `condition: service_healthy` blocks the proxy forever.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:80/api/v1/flags >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     env_file: .env
     environment:
       - AP_CONTAINER_TYPE=APP
+      # Pin the listen port: the image defaults AP_PORT to 80, but env_file may
+      # override it, which would desynchronise from `expose` and the nginx
+      # upstream `app:80` and 502 every proxied request.
+      - AP_PORT=80
     volumes:
       - ./cache:/usr/src/app/cache
     networks:
       - activepieces
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: run
   worker:
-    image: ghcr.io/activepieces/activepieces:0.86.1
+    image: inboxfm-connect:local
+    container_name: activepieces-worker
     restart: unless-stopped
     depends_on:
       - app

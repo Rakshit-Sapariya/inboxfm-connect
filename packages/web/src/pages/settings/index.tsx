@@ -1,16 +1,33 @@
-import { AlertTriangle, Building2, CreditCard, ExternalLink, Loader2, Moon, Palette, Shield, Sparkles, Sun, User } from 'lucide-react'
+import { AlertTriangle, Bot, Building2, CreditCard, ExternalLink, Loader2, Moon, Palette, Plus, Shield, Sparkles, Sun, User } from 'lucide-react'
+import { useState } from 'react'
+import { AIModelBrowserDialog } from '@/components/ai-providers/ai-model-browser-dialog'
+import { AIProviderDialog } from '@/components/ai-providers/ai-provider-dialog'
+import { AIProvidersTable } from '@/components/ai-providers/ai-providers-table'
 import { PageHeader } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/lib/auth/auth-context'
 import {
+  useAIProvidersQuery,
   useBillingInfoQuery,
+  useCreateAIProviderMutation,
   useCreateBillingCheckoutMutation,
   useCreateBillingPortalMutation,
+  useDeleteAIProviderMutation,
+  useUpdateAIProviderMutation,
 } from '@/lib/query/hooks'
 import { useTheme } from '@/lib/theme/theme-provider'
+import type {
+  AIProviderWithoutSensitiveData,
+  CreateAIProviderRequest,
+  UpdateAIProviderRequest,
+} from '@inboxfm-connect/shared'
 import { toast } from 'sonner'
 
 export default function SettingsPage() {
@@ -19,6 +36,76 @@ export default function SettingsPage() {
   const billingQuery = useBillingInfoQuery()
   const portalMutation = useCreateBillingPortalMutation()
   const checkoutMutation = useCreateBillingCheckoutMutation()
+
+  const aiProvidersQuery = useAIProvidersQuery()
+  const createAIProviderMutation = useCreateAIProviderMutation()
+  const updateAIProviderMutation = useUpdateAIProviderMutation()
+  const deleteAIProviderMutation = useDeleteAIProviderMutation()
+
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const [editingProvider, setEditingProvider] = useState<AIProviderWithoutSensitiveData | null>(null)
+  const [browsingProvider, setBrowsingProvider] = useState<AIProviderWithoutSensitiveData | null>(null)
+  const [deletingProvider, setDeletingProvider] = useState<AIProviderWithoutSensitiveData | null>(null)
+  const [togglingChatId, setTogglingChatId] = useState<string | null>(null)
+
+  const aiProviders = aiProvidersQuery.data ?? []
+
+  const handleOpenAddProvider = () => {
+    setEditingProvider(null)
+    setProviderDialogOpen(true)
+  }
+
+  const handleOpenEditProvider = (p: AIProviderWithoutSensitiveData) => {
+    setEditingProvider(p)
+    setProviderDialogOpen(true)
+  }
+
+  const handleSaveCreateProvider = async (req: CreateAIProviderRequest) => {
+    await createAIProviderMutation.mutateAsync(req)
+    toast.success('AI provider connected successfully')
+  }
+
+  const handleSaveUpdateProvider = async (id: string, req: UpdateAIProviderRequest) => {
+    await updateAIProviderMutation.mutateAsync({ id, request: req })
+    toast.success('AI provider updated successfully')
+  }
+
+  const handleDeleteProviderConfirm = async () => {
+    if (!deletingProvider) return
+    try {
+      await deleteAIProviderMutation.mutateAsync(deletingProvider.id)
+      toast.success('AI provider removed')
+      setDeletingProvider(null)
+    } catch (err: unknown) {
+      toast.error('Failed to remove provider', {
+        description: err instanceof Error ? err.message : 'Please try again',
+      })
+    }
+  }
+
+  const handleToggleChat = async (p: AIProviderWithoutSensitiveData, enabled: boolean) => {
+    try {
+      setTogglingChatId(p.id)
+      await updateAIProviderMutation.mutateAsync({
+        id: p.id,
+        request: {
+          displayName: p.name,
+          enabledForChat: enabled,
+        },
+      })
+      toast.success(
+        enabled
+          ? `${p.name} set as default chat provider`
+          : `${p.name} disabled for chat`
+      )
+    } catch (err: unknown) {
+      toast.error('Failed to update chat provider setting', {
+        description: err instanceof Error ? err.message : 'Please try again',
+      })
+    } finally {
+      setTogglingChatId(null)
+    }
+  }
 
   const billingInfo = billingQuery.data
 
@@ -163,6 +250,63 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* AI Providers Management */}
+        <Card className="border-border shadow-xs col-span-1 lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Bot className="h-4 w-4 text-primary" />
+                  <span>AI Providers</span>
+                </CardTitle>
+                <CardDescription className="text-xs mt-1">
+                  Configure large language model credentials for agent automations, tools, and chat.
+                </CardDescription>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1.5 text-xs shadow-xs"
+                onClick={handleOpenAddProvider}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Provider</span>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {aiProvidersQuery.isLoading ? (
+              <div className="space-y-2 py-2">
+                <Skeleton className="h-10 w-full rounded-md" />
+                <Skeleton className="h-10 w-full rounded-md" />
+              </div>
+            ) : aiProvidersQuery.isError ? (
+              <ErrorState
+                title="Could not load AI providers"
+                description="Unable to fetch configured AI providers from the server."
+                onRetry={() => void aiProvidersQuery.refetch()}
+              />
+            ) : aiProviders.length === 0 ? (
+              <EmptyState
+                icon={Bot}
+                title="No AI providers configured"
+                description="Connect an API key from OpenAI, Anthropic, Google Gemini, or AWS Bedrock to empower AI agent capabilities."
+                actionLabel="Add AI Provider"
+                onAction={handleOpenAddProvider}
+              />
+            ) : (
+              <AIProvidersTable
+                providers={aiProviders}
+                onEdit={handleOpenEditProvider}
+                onDelete={(p) => setDeletingProvider(p)}
+                onBrowseModels={(p) => setBrowsingProvider(p)}
+                onToggleChat={handleToggleChat}
+                togglingId={togglingChatId}
+              />
+            )}
+          </CardContent>
+        </Card>
+
         {/* Project Info */}
         <Card className="border-border shadow-xs">
           <CardHeader className="pb-3">
@@ -279,6 +423,38 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* AI Provider Modals */}
+      <AIProviderDialog
+        open={providerDialogOpen}
+        onOpenChange={setProviderDialogOpen}
+        editingProvider={editingProvider}
+        saving={createAIProviderMutation.isPending || updateAIProviderMutation.isPending}
+        onSaveCreate={handleSaveCreateProvider}
+        onSaveUpdate={handleSaveUpdateProvider}
+      />
+
+      <AIModelBrowserDialog
+        open={!!browsingProvider}
+        onOpenChange={(open) => {
+          if (!open) setBrowsingProvider(null)
+        }}
+        providerName={browsingProvider?.name ?? ''}
+        providerType={browsingProvider?.provider ?? null}
+      />
+
+      <ConfirmDialog
+        open={!!deletingProvider}
+        onOpenChange={(open) => {
+          if (!open) setDeletingProvider(null)
+        }}
+        title="Remove AI Provider"
+        description={`Are you sure you want to remove ${deletingProvider?.name}? Integrations and flows using this provider will stop working.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        loading={deleteAIProviderMutation.isPending}
+        onConfirm={handleDeleteProviderConfirm}
+      />
     </div>
   )
 }

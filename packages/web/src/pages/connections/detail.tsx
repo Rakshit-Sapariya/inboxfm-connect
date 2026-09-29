@@ -1,4 +1,4 @@
-import { ArrowLeft, KeyRound, PencilLine, Trash2 } from 'lucide-react'
+import { Activity, ArrowLeft, KeyRound, PencilLine, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -11,7 +11,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ErrorState } from '@/components/ui/error-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiClientError } from '@/lib/api/client'
-import { useConnection, useDeleteConnection, useIntegration } from '@/lib/query/hooks'
+import { TestConnectionResult } from '@/lib/api/types'
+import { useConnection, useDeleteConnection, useIntegration, useTestConnection } from '@/lib/query/hooks'
 import { connectionLinks } from '@/lib/utils/connection-links'
 import { connectionFormat } from '@/lib/utils/connection-format'
 
@@ -40,7 +41,36 @@ export default function ConnectionDetailPage() {
   const { data: connection, isLoading, isError, error, refetch } = useConnection(id)
   const { data: piece } = useIntegration(connection?.pieceName)
   const deleteConnection = useDeleteConnection()
+  const testConnection = useTestConnection()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [testResult, setTestResult] = useState<TestConnectionResult | null>(null)
+
+  function handleTest() {
+    if (!id) return
+    testConnection.mutate(
+      { id },
+      {
+        onSuccess: (result) => {
+          setTestResult(result)
+          if (result.ok) {
+            toast.success('Connection is healthy')
+          } else {
+            toast.error('Connection test failed', {
+              description: result.message ?? 'The connection could not be refreshed.',
+            })
+          }
+        },
+        onError: (testError) => {
+          toast.error('Connection test failed', {
+            description:
+              testError instanceof Error
+                ? testError.message
+                : 'The connection could not be tested. Try again.',
+          })
+        },
+      },
+    )
+  }
 
   if (!id || isLoading) {
     return (
@@ -115,6 +145,16 @@ export default function ConnectionDetailPage() {
             <Button
               variant="outline"
               size="sm"
+              className="gap-1.5"
+              onClick={handleTest}
+              disabled={testConnection.isPending}
+            >
+              <Activity className="h-3.5 w-3.5" />
+              <span>{testConnection.isPending ? 'Testing…' : 'Test'}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               className="gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10"
               onClick={() => setDeleteOpen(true)}
             >
@@ -149,8 +189,16 @@ export default function ConnectionDetailPage() {
               {connectionFormat.connectionTypeLabel(connection.type)}
             </DetailRow>
             <DetailRow label="Status">
-              <ConnectionStatusBadge status={connection.status} />
+              <ConnectionStatusBadge status={testResult?.status ?? connection.status} />
             </DetailRow>
+            <DetailRow label="Last tested">
+              {testResult ? formatDate(testResult.testedAt) : '—'}
+            </DetailRow>
+            {testResult && !testResult.ok && (
+              <DetailRow label="Test result">
+                <span className="text-destructive">{testResult.message ?? 'The connection could not be refreshed.'}</span>
+              </DetailRow>
+            )}
             <DetailRow label="Created">{formatDate(connection.created)}</DetailRow>
             <DetailRow label="Updated">{formatDate(connection.updated)}</DetailRow>
             {connection.externalId && (

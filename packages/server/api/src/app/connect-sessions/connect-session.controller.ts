@@ -86,6 +86,15 @@ export const connectSessionPublicController: FastifyPluginAsyncZod = async (app)
             })
         }
 
+        // Claim the session BEFORE persisting the connection: the single-use
+        // guarantee must hold at the endpoint level too, not just the row level.
+        // Two concurrent redemptions both pass getActiveOrThrow, but the claim
+        // picks exactly one winner — and now the loser fails before its upsert
+        // can overwrite the winner's connection. Retry-ability is unaffected:
+        // the OAuth exchange completes before this endpoint is called, so
+        // claim-first only burns the token if the upsert itself fails.
+        await connectSessionService.consumeOrThrow(session.id)
+
         const baseUpsert = {
             platformId: project.platformId,
             projectIds: [session.projectId],
@@ -110,7 +119,6 @@ export const connectSessionPublicController: FastifyPluginAsyncZod = async (app)
             type: req.body.type,
             value,
         })
-        await connectSessionService.markConsumed(session.id)
 
         return res.status(StatusCodes.CREATED).send(connection)
     })

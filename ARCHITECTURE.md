@@ -1,6 +1,33 @@
 # Inboxfm Connect architecture
 
-Inboxfm Connect is a headless fork of Activepieces. The web dashboard manages integrations, connections, API keys, and MCP servers; it does not include the upstream visual flow builder. This guide describes current module boundaries rather than promising that all inherited functionality has been removed.
+Inboxfm Connect is a headless fork of Activepieces building integration infrastructure for other applications and AI agents. The customer's application owns identity and product UX; Connect handles the connection and action infrastructure. The web dashboard manages integrations, connections, API keys, and MCP servers; it does not include the upstream visual flow builder. See [product direction](docs/PRODUCT_DIRECTION.md) for the delivery priorities and limits of current parity claims.
+
+## Embedded customer journey
+
+```mermaid
+sequenceDiagram
+    participant Customer
+    participant Product as Your application's backend
+    participant Connect as Inboxfm Connect API
+    participant Page as Connect connection page
+    participant Provider as Third-party provider
+    Customer->>Product: Sign in to your application
+    Product->>Connect: Create session with authenticated externalUserId and allowed integrations
+    Connect-->>Product: Short-lived connectUrl
+    Product-->>Customer: Open connection page
+    Customer->>Page: Authorize an account
+    Page->>Provider: OAuth consent using operator-configured app
+    Provider-->>Page: Authorization response
+    Page->>Connect: Save connection under the session's project and external user
+    Product->>Connect: Discover tools and execute using the customer's connection
+    Connect->>Provider: Integration action with server-side credentials
+    Connect-->>Product: Action result
+    Product-->>Customer: Product-specific result
+```
+
+The connection page is a capability granted by an expiring session token, not a project API key exposed to the customer. The backend must derive customer identity from its own authenticated session. Operator-configured OAuth apps, provider approvals, scopes, and callback URLs are deployment prerequisites. API-key and basic-auth connections follow a credential form flow instead of OAuth consent.
+
+Platform → Project controls the operator's tenancy. `externalUserId` identifies a customer of the consuming product inside that project; it must not be confused with an operator account or a global authorization grant. Connection ownership and per-user MCP tool exposure require explicit validation and regression coverage. A general provider API proxy is a planned capability, not part of the architecture implemented here.
 
 ## System overview
 
