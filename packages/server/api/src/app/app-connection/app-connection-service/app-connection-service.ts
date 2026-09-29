@@ -123,6 +123,37 @@ export const appConnectionService = (log: FastifyBaseLogger) => ({
         const updatedConnection = await appConnectionsRepo().findOneByOrFail(filter)
         return this.removeSensitiveData(updatedConnection)
     },
+    async testConnection({ id, projectId, platformId }: TestConnectionParams): Promise<TestConnectionResult> {
+        const encryptedAppConnection = await appConnectionsRepo().findOne({
+            where: {
+                id,
+                platformId,
+                projectIds: ArrayContains([projectId]),
+            },
+        })
+        if (isNil(encryptedAppConnection)) {
+            throw new ActivepiecesError({
+                code: ErrorCode.ENTITY_NOT_FOUND,
+                params: {
+                    entityType: 'AppConnection',
+                    entityId: id,
+                },
+            })
+        }
+        const testedAt = new Date().toISOString()
+        try {
+            const refreshed = await this.decryptAndRefreshConnection(encryptedAppConnection, projectId, log)
+            if (isNil(refreshed)) {
+                return await markConnectionTested({ id, status: AppConnectionStatus.ERROR, testedAt, message: 'The connection could not be refreshed.' })
+            }
+            return await markConnectionTested({ id, status: AppConnectionStatus.ACTIVE, testedAt })
+        }
+        catch (error) {
+            log.warn({ error, connection: { id } }, '[appConnectionService#testConnection] Health check failed')
+            const message = error instanceof Error && error.message ? error.message : 'The connection test failed.'
+            return markConnectionTested({ id, status: AppConnectionStatus.ERROR, testedAt, message })
+        }
+    },
     async getOne({
         projectId,
         platformId,
@@ -388,6 +419,22 @@ const fetchProjectsForPlatform = async (projectIds: string[], platformId: string
         select: ['id', 'displayName', 'type'],
     })
     return new Map(projects.map((project) => [project.id, { id: project.id, displayName: project.displayName, type: project.type }]))
+}
+
+async function markConnectionTested({ id, status, testedAt, message }: {
+    id: string
+    status: AppConnectionStatus
+    testedAt: string
+    message?: string
+}): Promise<TestConnectionResult> {
+    // Read-then-write: a concurrent refresh, reconnect, or health check may
+    // have recorded a newer status after this test ran — never blindly
+    // overwrite it with a stale result.
+    const current = await appConnectionsRepo().findOneBy({ id })
+    if (!isNil(current) && current.status !== status) {
+        await appConnectionsRepo().update({ id }, { status })
+    }
+    return { ok: status === AppConnectionStatus.ACTIVE, status, testedAt, message }
 }
 
 async function assertProjectIds(projectIds: ProjectId[], platformId: string): Promise<void> {
@@ -685,6 +732,19 @@ type EngineValidateAuthParams = {
     projectId: ProjectId | undefined
     platformId: string
     auth: AppConnectionValue
+}
+
+type TestConnectionParams = {
+    id: AppConnectionId
+    projectId: ProjectId
+    platformId: string
+}
+
+type TestConnectionResult = {
+    ok: boolean
+    status: AppConnectionStatus
+    testedAt: string
+    message?: string
 }
 
 

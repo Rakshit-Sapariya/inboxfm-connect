@@ -105,6 +105,7 @@ const systemPropValidators: {
     [AppSystemProp.ENCRYPTION_KEY]: stringValidator,
     [AppSystemProp.EXECUTION_DATA_RETENTION_DAYS]: numberValidator,
     [AppSystemProp.JWT_SECRET]: stringValidator,
+    [AppSystemProp.JWT_ISSUER]: stringValidator,
     [AppSystemProp.DEFAULT_CONCURRENT_JOBS_LIMIT]: numberValidator,
     [AppSystemProp.PIECES_SYNC_MODE]: enumValidator(Object.values(PieceSyncMode)),
     [AppSystemProp.POSTGRES_DATABASE]: stringValidator,

@@ -196,13 +196,57 @@ describe('isolateProcess', () => {
             expect(args).toContain('--share-net')
         })
 
+        it('applies the memory ceiling via --mem and --max-old-space-size', async () => {
+            await callCreate({ boxId: 42 })
+            const args: string[] = spawnMock.mock.calls[0][1]
+            expect(args).toContain('--mem=256')
+            expect(args).toContain('--max-old-space-size=256')
+        })
+
+        it('does NOT pass isolate --time, which would kill a reused sandbox', async () => {
+            // Isolate's --time is a wall-clock limit counted from process start
+            // and it kills the process. Sandboxes are reused when
+            // REUSE_SANDBOX=true, and always in DEVELOPMENT, so a fixed --time
+            // would tear down a healthy worker mid-run once it aged past
+            // FLOW_TIMEOUT_SECONDS - and would pre-empt the per-execution
+            // setTimeout in sandbox.ts#execute, which is the correct place for
+            // a per-run budget. Locking the absence so it is not "helpfully"
+            // re-added.
+            await callCreate({ boxId: 42 })
+            const args: string[] = spawnMock.mock.calls[0][1]
+            expect(args.some((a) => a.startsWith('--time'))).toBe(false)
+        })
+
+        it('scales the memory flags with the configured limit', async () => {
+            const maker = isolateProcess(createMockLogger(), '/host/cache/common/main.js', '/host/cache/codes', 5)
+            await maker.create({
+                sandboxId: 'sb-mem',
+                command: [],
+                mounts: [],
+                env: BASE_ENV,
+                resourceLimits: { memoryLimitMb: 4096, cpuMsPerSec: 1000, timeLimitSeconds: 60 },
+            })
+            const args: string[] = spawnMock.mock.calls[0][1]
+            expect(args).toContain('--mem=4096')
+            expect(args).toContain('--max-old-space-size=4096')
+        })
+
         it('runs node with engine path at /root/common/<basename>', async () => {
             await callCreate({ enginePath: '/any/where/engine-main.js' })
             const args: string[] = spawnMock.mock.calls[0][1]
-            expect(args[args.length - 2]).toBe(process.execPath)
+
+            // Locate the node invocation rather than pinning absolute indices:
+            // node flags now sit between the binary and the script, so
+            // "second to last" is no longer the executable.
+            const runIndex = args.lastIndexOf('--run')
+            expect(runIndex).toBeGreaterThan(-1)
+            expect(args[runIndex + 1]).toBe('--')
+            expect(args[runIndex + 2]).toBe(process.execPath)
+            expect(args).toContain('--max-old-space-size=256')
             expect(args[args.length - 1]).toBe('/root/common/engine-main.js')
-            expect(args[args.length - 3]).toBe('--')
-            expect(args[args.length - 4]).toBe('--run')
+
+            // The V8 heap flag must reach node, i.e. sit after the binary.
+            expect(args.indexOf('--max-old-space-size=256')).toBeGreaterThan(args.indexOf(process.execPath))
         })
 
         it('spawns with shell: false', async () => {

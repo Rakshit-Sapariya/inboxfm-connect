@@ -128,3 +128,9 @@ function getDateRange(timePeriod: AnalyticsTimePeriod): string {
             throw new Error(`Invalid time period: ${timePeriod}`)
     }
 }
+
+export const platformAnalyticsTesting = {
+    mergeRuns,
+    filterReportByTimePeriod,
+    getDateRange,
+}

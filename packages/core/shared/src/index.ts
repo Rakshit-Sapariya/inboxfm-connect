@@ -27,6 +27,10 @@ export * from './lib/management/platform'
 export * from './lib/management/project'
 export * from './lib/management/project-role/project-role.request'
 export * from './lib/management/invitations'
+import { AIProviderName as _AIProviderName } from '@inboxfm-connect/core-utils'
+export const AIProviderName = _AIProviderName
+export type AIProviderName = _AIProviderName
+
 export * from './lib/management/analytics'
 export * from './lib/management/ai-providers'
 export * from './lib/management/ai-tools'

@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -64,7 +64,7 @@ jobs:
       matrix:
         suite: [quality, unit, engine-integration, ce, ee, cloud, migrations, integrations]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -77,7 +77,7 @@ jobs:
           node tools/ci/run-check.mjs "$SUITE" 2>&1 | tee ci.log
       - name: Upload diagnostics
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.suite }}-diagnostics
           path: |
@@ -120,7 +120,7 @@ jobs:
       AP_POSTGRES_PASSWORD: postgres
       AP_POSTGRES_USE_SSL: 'false'
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
@@ -135,7 +135,7 @@ jobs:
           bun x vitest run test/integration/ce/tool-search test/integration/ce/database --bail 1 --passWithNoTests=false 2>&1 | tee postgres-tests.log
       - name: Upload PostgreSQL diagnostics
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: postgres-diagnostics
           path: packages/server/api/postgres-tests.log
@@ -173,10 +173,38 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  gateway:
+    name: Inbound gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Validate shipped nginx configuration
+        run: |
+          # `nginx -t` resolves upstream server names, so run it on a throwaway
+          # network that answers for the `app` hostname.
+          docker network create gateway-config-check
+          docker run -d --name app --network gateway-config-check nginx:1.30.5-alpine sleep 600
+          trap 'docker rm -f app >/dev/null 2>&1 || true; docker network rm gateway-config-check >/dev/null 2>&1 || true' EXIT
+          docker run --rm --network gateway-config-check \
+            -v "$GITHUB_WORKSPACE/infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            nginx:1.30.5-alpine nginx -t
+      - name: Validate compose topology
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.yml config -q
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f app >/dev/null 2>&1 || true
+          docker network rm gateway-config-check >/dev/null 2>&1 || true
+
   main:
     name: main
     if: always()
-    needs: [policy, checks, tool-search-postgres, browser]
+    needs: [policy, checks, tool-search-postgres, browser, gateway]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

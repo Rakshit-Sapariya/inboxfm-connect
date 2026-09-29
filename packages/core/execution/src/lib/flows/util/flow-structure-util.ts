@@ -1,6 +1,6 @@
 import { isNil } from '@inboxfm-connect/core-utils'
 import { ActivepiecesError, ErrorCode } from '@inboxfm-connect/core-utils'
-import { BranchCondition, BranchExecutionType, emptyCondition, FlowAction, FlowActionType } from '../actions/action'
+import { BranchExecutionType, emptyCondition, FlowAction, FlowActionType, ValidBranchCondition } from '../actions/action'
 import { FlowVersion } from '../flow-version'
 import { FlowTrigger, FlowTriggerType } from '../triggers/trigger'
 
@@ -158,7 +158,7 @@ function getStepNumber(trigger: FlowTrigger, stepName: string): number {
 }
 
 
-const createBranch = (branchName: string, conditions: BranchCondition[][] | undefined) => {
+const createBranch = (branchName: string, conditions: ValidBranchCondition[][] | undefined) => {
     return {
         conditions: conditions ?? [[emptyCondition]],
         branchType: BranchExecutionType.CONDITION,

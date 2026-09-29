@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import '../lib/i18n'
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
   configurable: true,
