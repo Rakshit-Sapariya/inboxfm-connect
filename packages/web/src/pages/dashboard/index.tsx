@@ -33,10 +33,30 @@ import {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { data: integrationsData, isLoading: isIntegrationsLoading } = useIntegrations()
-  const { data: connections, isLoading: isConnectionsLoading } = useConnectionsQuery()
-  const { data: triggerBindings, isLoading: isTriggersLoading } = useTriggerBindingsQuery()
-  const { data: scheduledTasks, isLoading: isSchedulesLoading } = useScheduledTasksQuery()
+  const {
+    data: integrationsData,
+    isLoading: isIntegrationsLoading,
+    isError: isIntegrationsError,
+    refetch: refetchIntegrations,
+  } = useIntegrations()
+  const {
+    data: connections,
+    isLoading: isConnectionsLoading,
+    isError: isConnectionsError,
+    refetch: refetchConnections,
+  } = useConnectionsQuery()
+  const {
+    data: triggerBindings,
+    isLoading: isTriggersLoading,
+    isError: isTriggersError,
+    refetch: refetchTriggerBindings,
+  } = useTriggerBindingsQuery()
+  const {
+    data: scheduledTasks,
+    isLoading: isSchedulesLoading,
+    isError: isSchedulesError,
+    refetch: refetchScheduledTasks,
+  } = useScheduledTasksQuery()
   const {
     data: executionsData,
     isLoading: isExecutionsLoading,
@@ -84,6 +104,13 @@ export default function DashboardPage() {
           <div className="mt-2">
             {isIntegrationsLoading ? (
               <Skeleton className="h-7 w-16" />
+            ) : isIntegrationsError ? (
+              <div className="space-y-2">
+                <div className="text-2xl font-bold tracking-tight text-destructive">Error</div>
+                <Button size="sm" variant="outline" onClick={() => void refetchIntegrations()}>
+                  Retry
+                </Button>
+              </div>
             ) : (
               <div className="text-2xl font-bold tracking-tight text-foreground">
                 {totalToolsCount}
@@ -106,6 +133,13 @@ export default function DashboardPage() {
           <div className="mt-2">
             {isConnectionsLoading ? (
               <Skeleton className="h-7 w-16" />
+            ) : isConnectionsError ? (
+              <div className="space-y-2">
+                <div className="text-2xl font-bold tracking-tight text-destructive">Error</div>
+                <Button size="sm" variant="outline" onClick={() => void refetchConnections()}>
+                  Retry
+                </Button>
+              </div>
             ) : (
               <div className="text-2xl font-bold tracking-tight text-foreground">
                 {activeConnectionsCount}
@@ -128,6 +162,13 @@ export default function DashboardPage() {
           <div className="mt-2">
             {isTriggersLoading ? (
               <Skeleton className="h-7 w-16" />
+            ) : isTriggersError ? (
+              <div className="space-y-2">
+                <div className="text-2xl font-bold tracking-tight text-destructive">Error</div>
+                <Button size="sm" variant="outline" onClick={() => void refetchTriggerBindings()}>
+                  Retry
+                </Button>
+              </div>
             ) : (
               <div className="text-2xl font-bold tracking-tight text-foreground">
                 {activeTriggersCount}
@@ -150,6 +191,13 @@ export default function DashboardPage() {
           <div className="mt-2">
             {isSchedulesLoading ? (
               <Skeleton className="h-7 w-16" />
+            ) : isSchedulesError ? (
+              <div className="space-y-2">
+                <div className="text-2xl font-bold tracking-tight text-destructive">Error</div>
+                <Button size="sm" variant="outline" onClick={() => void refetchScheduledTasks()}>
+                  Retry
+                </Button>
+              </div>
             ) : (
               <div className="text-2xl font-bold tracking-tight text-foreground">
                 {activeSchedulesCount}
