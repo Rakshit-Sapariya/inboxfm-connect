@@ -113,11 +113,26 @@ export function isolateProcess(log: SandboxLogger, enginePath: string, _codeDire
                 '--share-net',
                 `--box-id=${boxId}`,
                 '--processes',
+                // Ceiling, not a countdown. Isolate mode previously applied no
+                // memory limit at all, so a runaway piece could exhaust the host.
+                `--mem=${params.resourceLimits.memoryLimitMb}`,
+                // Deliberately NO `--time` here. Isolate's --time is a wall-clock
+                // limit measured from process start, and it kills the process. A
+                // sandbox is reused when REUSE_SANDBOX=true (and always in
+                // DEVELOPMENT - see canReuseSandbox), so a fixed --time would
+                // tear down a healthy worker mid-execution once it aged past
+                // FLOW_TIMEOUT_SECONDS. The per-execution budget is already
+                // enforced precisely, per run, by the setTimeout in
+                // sandbox.ts#execute using executeOptions.timeoutInSeconds.
                 '--chdir=/root',
                 ...envArgs,
                 '--run',
                 '--',
                 process.execPath,
+                // Keep V8's own heap ceiling at or below the isolate ceiling so
+                // the allocation failure happens inside the sandbox (where we
+                // can report it) rather than as an opaque host OOM.
+                `--max-old-space-size=${params.resourceLimits.memoryLimitMb}`,
                 engineSandboxPath,
             ]
 

@@ -470,7 +470,7 @@ export type SecretManagerKeyNotSecretParams = BaseErrorParams<ErrorCode.SECRET_M
 export type InvalidAIProviderCredentialsParams = BaseErrorParams<ErrorCode.INVALID_AI_PROVIDER_CREDENTIALS, {
     provider: string
     message: string
-    httpErrorResponse: string
+    httpErrorResponse?: string
 }>
 
 export type FlowMigrationFailedParams = BaseErrorParams<ErrorCode.FLOW_MIGRATION_FAILED, {

@@ -1,4 +1,9 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type {
+  CreateAIProviderRequest,
+  UpdateAIProviderRequest,
+} from '@inboxfm-connect/shared'
+import { type AIProviderName, aiProvidersApi } from '../api/ai-providers'
 import { apiKeysApi } from '../api/api-keys'
 import { automationsApi } from '../api/automations'
 import { billingApi } from '../api/billing'
@@ -125,14 +130,24 @@ export function useDeleteConnection() {
   })
 }
 
+export function useTestConnection() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => connectionsApi.test({ id }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['connections'] })
+      void queryClient.invalidateQueries({ queryKey: ['connection'] })
+    },
+  })
+}
+
 export function useProjectApiKeysQuery() {
   const projectId = apiClient.getProjectId()
   return useQuery({
     queryKey: ['project-api-keys', projectId],
     queryFn: () => apiKeysApi.list(),
-    // `showErrorToast` (not `showErrorDialog`) is the key `query-client.ts` actually
-    // checks — this query renders the API Keys page's primary table.
-    meta: { showErrorToast: true },
+    // Standardized global error convention per AGENTS.md
+    meta: { showErrorDialog: true },
   })
 }
 
@@ -158,7 +173,7 @@ export function useDeleteProjectApiKey() {
 
 /**
  * Minor/auxiliary query: only used to gate the Platform API Keys section, so it
- * intentionally has no `showErrorToast` — a failure here just leaves the platform
+ * intentionally has no `showErrorDialog` — a failure here just leaves the platform
  * key section hidden rather than surfacing a distracting toast.
  */
 export function usePlatformQuery({ platformId }: { platformId?: string }) {
@@ -174,7 +189,7 @@ export function usePlatformApiKeysQuery({ enabled }: { enabled: boolean }) {
     queryKey: ['platform-api-keys'],
     queryFn: () => platformApiKeysApi.list(),
     enabled,
-    meta: { showErrorToast: true },
+    meta: { showErrorDialog: true },
   })
 }
 
@@ -233,9 +248,7 @@ export function useTriggerBindingsQuery(options?: { enabled?: boolean; showError
     queryKey: ['trigger-bindings', apiClient.getProjectId()],
     queryFn: () => automationsApi.listTriggerBindings(),
     select: (page) => page.data,
-    // Every current call site (Trigger Bindings list, Dashboard summary) renders
-    // this as primary data, so a fetch failure should surface a toast.
-    meta: { showErrorToast },
+    meta: { showErrorToast, showErrorDialog: showErrorToast },
     enabled: options?.enabled,
   })
 }
@@ -251,7 +264,7 @@ export function useTriggerBindingsInfiniteQuery(
       automationsApi.listTriggerBindings(pageParam ? { cursor: pageParam } : undefined),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next ?? undefined,
-    meta: { showErrorToast },
+    meta: { showErrorToast, showErrorDialog: showErrorToast },
     enabled: options?.enabled,
   })
 }
@@ -341,7 +354,7 @@ export function useScheduledTasksQuery(options?: { enabled?: boolean; showErrorT
     select: (page) => page.data,
     // Every current call site (Scheduled Tasks list, Dashboard summary) renders
     // this as primary data, so a fetch failure should surface a toast.
-    meta: { showErrorToast },
+    meta: { showErrorToast, showErrorDialog: showErrorToast },
     enabled: options?.enabled,
   })
 }
@@ -357,7 +370,7 @@ export function useScheduledTasksInfiniteQuery(
       automationsApi.listScheduledTasks(pageParam ? { cursor: pageParam } : undefined),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next ?? undefined,
-    meta: { showErrorToast },
+    meta: { showErrorToast, showErrorDialog: showErrorToast },
     enabled: options?.enabled,
   })
 }
@@ -427,7 +440,7 @@ export function useMcpServerQuery(projectId?: string) {
     enabled: !!effectiveProjectId,
     // Sole call site is the MCP Hub page, where this is the primary data driving
     // the whole page.
-    meta: { showErrorToast: true },
+    meta: { showErrorDialog: true },
   })
 }
 
@@ -488,7 +501,7 @@ export function useExecutionsQuery(
     placeholderData: keepPreviousData,
     // Every current call site (Activity list, Dashboard "Recent Executions") renders
     // this as primary data, so a fetch failure should surface a toast.
-    meta: { showErrorToast },
+    meta: { showErrorToast, showErrorDialog: showErrorToast },
     enabled: options?.enabled,
   })
 }
@@ -535,4 +548,53 @@ export function useCreateBillingCheckoutMutation() {
       billingApi.createCheckoutSession({ newActiveFlowsLimit }),
   })
 }
+
+export function useAIProvidersQuery() {
+  return useQuery({
+    queryKey: ['ai-providers'],
+    queryFn: () => aiProvidersApi.list(),
+    meta: { showErrorToast: true },
+  })
+}
+
+export function useAIProviderModelsQuery(provider?: AIProviderName, enabled = true) {
+  return useQuery({
+    queryKey: ['ai-provider-models', provider],
+    queryFn: () => (provider ? aiProvidersApi.listModels(provider) : Promise.resolve([])),
+    enabled: !!provider && enabled,
+    staleTime: 60_000,
+  })
+}
+
+export function useCreateAIProviderMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: CreateAIProviderRequest) => aiProvidersApi.create(request),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
+    },
+  })
+}
+
+export function useUpdateAIProviderMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, request }: { id: string; request: UpdateAIProviderRequest }) =>
+      aiProvidersApi.update(id, request),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
+    },
+  })
+}
+
+export function useDeleteAIProviderMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => aiProvidersApi.delete(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
+    },
+  })
+}
+
 

@@ -154,6 +154,13 @@ export interface AppConnection {
   projectIds: string[]
 }
 
+export interface TestConnectionResult {
+  ok: boolean
+  status: AppConnectionStatus
+  testedAt: string
+  message?: string
+}
+
 export interface CreateConnectionRequest {
   /** Required by the backend authorization layer; resolved from the active project when omitted. */
   projectId?: string

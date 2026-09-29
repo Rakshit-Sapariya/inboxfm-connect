@@ -2523,3 +2523,11 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
         })
     },
 })
+
+export const projectReplaceTesting = {
+    canonicalJson,
+    computePlanSignature,
+    computeSha256,
+    sanitizeMappingForPlan,
+    getSigningSecret,
+}

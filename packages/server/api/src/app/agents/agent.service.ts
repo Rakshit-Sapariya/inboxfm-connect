@@ -21,7 +21,7 @@ export const agentService = {
         status?: 'ENABLED' | 'DISABLED'
     }): Promise<Agent> {
         const id = params.id ?? apId()
-        const newAgent: AgentSchema = {
+        const newAgent: Agent = {
             id,
             created: new Date().toISOString(),
             updated: new Date().toISOString(),

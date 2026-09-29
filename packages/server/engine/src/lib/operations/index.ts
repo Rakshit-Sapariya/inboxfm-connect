@@ -10,27 +10,69 @@ import { propertyOperation } from './property.operation'
 import { triggerHookOperation } from './trigger-hook.operation'
 
 
+function isExecuteExtractPieceMetadataOperation(operation: unknown): operation is ExecuteExtractPieceMetadataOperation {
+    return typeof operation === 'object' && operation !== null && 'pieceName' in operation && 'pieceVersion' in operation
+}
+
+function isExecutePropsOptions(operation: unknown): operation is ExecutePropsOptions {
+    return typeof operation === 'object' && operation !== null && 'propertyName' in operation && 'actionOrTriggerName' in operation
+}
+
+function isExecuteTriggerOperation(operation: unknown): operation is ExecuteTriggerOperation<TriggerHookType> {
+    return typeof operation === 'object' && operation !== null && 'hookType' in operation
+}
+
+function isExecuteValidateAuthOperation(operation: unknown): operation is ExecuteValidateAuthOperation {
+    return typeof operation === 'object' && operation !== null && 'piece' in operation && 'auth' in operation
+}
+
+function isExecuteRefreshTokenAuthOperation(operation: unknown): operation is ExecuteRefreshTokenAuthOperation {
+    return typeof operation === 'object' && operation !== null && 'piece' in operation && 'auth' in operation
+}
+
+function isExecuteToolOperation(operation: unknown): operation is ExecuteToolOperation {
+    return typeof operation === 'object' && operation !== null && 'actionName' in operation
+}
+
 export async function execute(operationType: EngineOperationType, operation: EngineOperation): Promise<EngineResponse<unknown>> {
     const result = await tryCatch(async () => {
         switch (operationType) {
             case EngineOperationType.EXTRACT_PIECE_METADATA: {
-                return pieceMetadataOperation.extract(operation as ExecuteExtractPieceMetadataOperation)
+                if (!isExecuteExtractPieceMetadataOperation(operation)) {
+                    throw new ExecutionError('Invalid operation payload', 'Invalid payload for EXTRACT_PIECE_METADATA', ExecutionErrorType.ENGINE)
+                }
+                return pieceMetadataOperation.extract(operation)
             }
             case EngineOperationType.EXECUTE_PROPERTY: {
-                return propertyOperation.execute(operation as ExecutePropsOptions)
+                if (!isExecutePropsOptions(operation)) {
+                    throw new ExecutionError('Invalid operation payload', 'Invalid payload for EXECUTE_PROPERTY', ExecutionErrorType.ENGINE)
+                }
+                return propertyOperation.execute(operation)
             }
             case EngineOperationType.EXECUTE_TRIGGER_HOOK: {
-                return triggerHookOperation.execute(operation as ExecuteTriggerOperation<TriggerHookType>)
+                if (!isExecuteTriggerOperation(operation)) {
+                    throw new ExecutionError('Invalid operation payload', 'Invalid payload for EXECUTE_TRIGGER_HOOK', ExecutionErrorType.ENGINE)
+                }
+                return triggerHookOperation.execute(operation)
             }
             case EngineOperationType.EXECUTE_VALIDATE_AUTH: {
-                return authValidationOperation.execute(operation as ExecuteValidateAuthOperation)
+                if (!isExecuteValidateAuthOperation(operation)) {
+                    throw new ExecutionError('Invalid operation payload', 'Invalid payload for EXECUTE_VALIDATE_AUTH', ExecutionErrorType.ENGINE)
+                }
+                return authValidationOperation.execute(operation)
             }
             case EngineOperationType.EXECUTE_REFRESH_TOKEN_AUTH: {
-                return authRefreshOperation.execute(operation as ExecuteRefreshTokenAuthOperation)
+                if (!isExecuteRefreshTokenAuthOperation(operation)) {
+                    throw new ExecutionError('Invalid operation payload', 'Invalid payload for EXECUTE_REFRESH_TOKEN_AUTH', ExecutionErrorType.ENGINE)
+                }
+                return authRefreshOperation.execute(operation)
             }
             case EngineOperationType.EXECUTE_TOOL: {
+                if (!isExecuteToolOperation(operation)) {
+                    throw new ExecutionError('Invalid operation payload', 'Invalid payload for EXECUTE_TOOL', ExecutionErrorType.ENGINE)
+                }
                 return pieceHelper.executeTool({
-                    params: operation as ExecuteToolOperation,
+                    params: operation,
                     devPieces: EngineConstants.DEV_PIECES,
                 })
             }

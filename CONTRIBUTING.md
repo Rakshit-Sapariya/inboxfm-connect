@@ -36,6 +36,7 @@ Use a conventional PR title, such as `fix(api): scope connection lookup to its p
 - Use proper types, a destructured object for functions with multiple parameters, and immutable data flow. Do not introduce `any`, forced casts, or deprecated APIs.
 - Keep integration and engine code independent of the thick `@inboxfm-connect/shared` package.
 - Use `safeHttp.axios` or `safeHttp.createAxios()` for server-side outbound HTTP; preserve SSRF protection.
+- Outbound integration HTTP requests strictly verify TLS certificates by default. Do not set `process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'`. For integrations against self-signed or private-CA endpoints, operators should set `NODE_EXTRA_CA_CERTS` or configure a custom undici `dispatcher` on `SendRequestOptions` with appropriate TLS options scoped strictly to the request.
 - User-facing validation messages must be translation keys.
 - Do not copy or relocate Enterprise-licensed implementation into MIT directories, strip notices, or introduce new Enterprise imports. See [LICENSING.md](LICENSING.md).
 - Never commit live credentials, personal data, or production environment files.
@@ -61,7 +62,7 @@ The API test environment supplies PGlite and memory Redis; the dedicated CI job 
 
 Add meaningful regression tests for behavior changes. Cover the edition and plan paths affected by a change, including CE, EE, Cloud standard/paid/enterprise where relevant. Enterprise tests exercise development/testing permission; they do not authorize production use.
 
-Before changing migrations, read the [Database Migrations Playbook](https://www.inboxfm-connect.com/docs/handbook/engineering/playbooks/database-migration#database-migrations). Do not generate a migration just to silence an infrastructure failure.
+Before changing migrations, read the [Database Migrations Playbook](docs/handbook/engineering/playbooks/database-migration.mdx). Do not generate a migration just to silence an infrastructure failure.
 
 ## Submit and review
 
