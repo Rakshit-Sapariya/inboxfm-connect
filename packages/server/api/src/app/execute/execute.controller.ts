@@ -65,6 +65,7 @@ export const executeController: FastifyPluginAsyncZod = async (fastify) => {
         const publicUrl = system.get(AppSystemProp.FRONTEND_URL) || 'http://localhost:3000'
         const connectionId = await resolveConnectionId({
             projectId: request.projectId,
+            platformId: request.principal.platform.id,
             connectionId: request.body.connectionId,
             externalUserId: request.body.externalUserId,
             pieceName: request.body.integration,
@@ -92,9 +93,9 @@ export const executeController: FastifyPluginAsyncZod = async (fastify) => {
     })
 }
 
-async function resolveConnectionId({ projectId, connectionId, externalUserId, pieceName }: ResolveConnectionIdParams): Promise<string> {
+async function resolveConnectionId({ projectId, platformId, connectionId, externalUserId, pieceName }: ResolveConnectionIdParams): Promise<string> {
     if (!isNil(connectionId)) {
-        return connectionId
+        return resolveExplicitConnectionId({ projectId, platformId, connectionId, externalUserId, pieceName })
     }
     if (isNil(externalUserId)) {
         throw new ActivepiecesError({
@@ -121,9 +122,44 @@ async function resolveConnectionId({ projectId, connectionId, externalUserId, pi
     return connection.id
 }
 
+// A named connectionId is an opaque handle, not proof of ownership — it is the one
+// resolution path that never filters on the caller's project. It is therefore
+// re-resolved against the authorized project (and platform) before use, and, when
+// the caller also names an externalUserId, pinned to that same customer, so a
+// connection id harvested from another tenant or another customer of this project
+// resolves to "not found" instead of reaching the runtime.
+async function resolveExplicitConnectionId({ projectId, platformId, connectionId, externalUserId, pieceName }: ResolveExplicitConnectionIdParams): Promise<string> {
+    const connection = await appConnectionsRepo().findOneBy({
+        id: connectionId,
+        platformId,
+        pieceName,
+        projectIds: ArrayContains([projectId]),
+    })
+    const belongsToAnotherCustomer = !isNil(connection) && !isNil(externalUserId) && connection.externalId !== externalUserId
+    if (isNil(connection) || belongsToAnotherCustomer) {
+        throw new ActivepiecesError({
+            code: ErrorCode.ENTITY_NOT_FOUND,
+            params: {
+                entityType: 'app_connection',
+                message: 'Connection not found',
+            },
+        })
+    }
+    return connection.id
+}
+
 type ResolveConnectionIdParams = {
     projectId: string
+    platformId: string
     connectionId: string | undefined
+    externalUserId: string | undefined
+    pieceName: string
+}
+
+type ResolveExplicitConnectionIdParams = {
+    projectId: string
+    platformId: string
+    connectionId: string
     externalUserId: string | undefined
     pieceName: string
 }

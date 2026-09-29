@@ -178,4 +178,110 @@ describe('Connection detail page', () => {
     expect(deleted).toBe(true)
     await waitFor(() => container.textContent?.includes('list') === true)
   }, 15000)
+
+  it('runs the health check and shows the last-tested result', async () => {
+    let tested = false
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const raw = String(input)
+      if (raw.includes('/connections/conn_1/test') && init?.method === 'POST') {
+        tested = true
+        return new Response(
+          JSON.stringify({ ok: true, status: 'ACTIVE', testedAt: new Date('2026-09-28T12:00:00Z').toISOString() }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      if (raw.includes('/connections/conn_1')) {
+        return new Response(JSON.stringify(githubConnection('conn_1', 'Mihir GitHub')), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      if (raw.includes('/integrations/github')) {
+        return new Response(
+          JSON.stringify({
+            name: 'github',
+            displayName: 'GitHub',
+            logoUrl: '',
+            description: '',
+            version: '0.3.4',
+            auth: { type: 'OAUTH2' },
+            actions: {},
+            triggers: {},
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }
+      return new Response(JSON.stringify({ message: 'unhandled' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+
+    const container = renderDetail('conn_1')
+
+    await waitFor(() => container.textContent?.includes('Mihir GitHub') === true)
+
+    const testButton = Array.from(container.querySelectorAll('button')).find((candidate) =>
+      candidate.textContent?.trim() === 'Test'
+    )
+    expect(testButton).not.toBeUndefined()
+    await act(async () => {
+      testButton?.click()
+    })
+
+    await waitFor(() => tested === true)
+    expect(tested).toBe(true)
+    await waitFor(() => container.textContent?.includes('Last tested') === true)
+  }, 15000)
+
+  it('surfaces the failure message when the health check fails', async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const raw = String(input)
+      if (raw.includes('/connections/conn_1/test') && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({ ok: false, status: 'ERROR', testedAt: new Date('2026-09-28T12:00:00Z').toISOString(), message: 'Token expired' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      if (raw.includes('/connections/conn_1')) {
+        return new Response(JSON.stringify(githubConnection('conn_1', 'Mihir GitHub')), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      if (raw.includes('/integrations/github')) {
+        return new Response(
+          JSON.stringify({
+            name: 'github',
+            displayName: 'GitHub',
+            logoUrl: '',
+            description: '',
+            version: '0.3.4',
+            auth: { type: 'OAUTH2' },
+            actions: {},
+            triggers: {},
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }
+      return new Response(JSON.stringify({ message: 'unhandled' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+
+    const container = renderDetail('conn_1')
+
+    await waitFor(() => container.textContent?.includes('Mihir GitHub') === true)
+
+    const testButton = Array.from(container.querySelectorAll('button')).find((candidate) =>
+      candidate.textContent?.trim() === 'Test'
+    )
+    await act(async () => {
+      testButton?.click()
+    })
+
+    await waitFor(() => container.textContent?.includes('Token expired') === true)
+    expect(container.textContent).toContain('Token expired')
+  }, 15000)
 })

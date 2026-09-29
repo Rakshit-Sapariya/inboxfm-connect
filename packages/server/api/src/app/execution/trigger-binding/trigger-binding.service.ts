@@ -1,5 +1,5 @@
-import { ActivepiecesError, apId, ErrorCode, isNil, SeekPage } from '@inboxfm-connect/core-utils'
-import { scheduler } from '@inboxfm-connect/scheduler'
+import { ActivepiecesError, apId, ErrorCode, isNil, SeekPage, tryCatch } from '@inboxfm-connect/core-utils'
+import { cronParser, scheduler } from '@inboxfm-connect/scheduler'
 import { apLogger } from '@inboxfm-connect/server-utils'
 import {
     CreateTriggerBindingRequest,
@@ -16,7 +16,10 @@ import {
     UpdateTriggerBindingRequest,
     WorkerJobType,
 } from '@inboxfm-connect/shared'
+import { FastifyBaseLogger } from 'fastify'
 import { repoFactory } from '../../core/db/repo-factory'
+import { getTriggerBindingTickLockKey } from '../../database/redis/keys'
+import { distributedStore } from '../../database/redis-connections'
 import { userInteractionWatcher } from '../../helper/user-interaction/user-interaction-watcher'
 import { projectExecutionConcurrencyGuard } from '../concurrency/project-execution-concurrency-guard'
 import { executionService } from '../execution.service'
@@ -226,15 +229,78 @@ export const triggerBindingService = {
 
         await triggerBindingRepo().delete({ id, projectId, platformId })
     },
+
+    async reRegisterEnabledSchedules({ log }: { log: FastifyBaseLogger }): Promise<{ registered: number, skipped: number, total: number }> {
+        let bindings: TriggerBindingSchema[] = []
+        try {
+            bindings = await triggerBindingRepo().findBy({ status: TriggerBindingStatus.ENABLED })
+        }
+        catch (error) {
+            log.error({ error }, '[triggerBindingService#reRegisterEnabledSchedules] Failed to query enabled trigger bindings from database')
+            return { registered: 0, skipped: 0, total: 0 }
+        }
+
+        let registered = 0
+        let skipped = 0
+        for (const binding of bindings) {
+            try {
+                await syncTriggerSchedule(binding)
+                registered += 1
+            }
+            catch (error) {
+                log.warn({ error, binding: { id: binding.id } }, '[triggerBindingService#reRegisterEnabledSchedules] Skipping schedule that failed to register')
+                skipped += 1
+            }
+        }
+        return { registered, skipped, total: bindings.length }
+    },
+}
+
+async function claimTriggerTick(bindingId: string, cronType: 'run' | 'renew', cronExpression: string, timezone?: string): Promise<boolean> {
+    const key = getTriggerBindingTickLockKey(bindingId, cronType)
+    let ttlSeconds = 55
+    try {
+        const next = cronParser.computeNextTick({ cronExpression, timezone: timezone ?? 'UTC' })
+        const diffSeconds = Math.floor((next.getTime() - Date.now()) / 1000)
+        ttlSeconds = Math.max(1, Math.min(55, diffSeconds - 1))
+    }
+    catch {
+        ttlSeconds = 55
+    }
+    const result = await tryCatch(() => distributedStore.putIfAbsent(key, 1, ttlSeconds))
+    if (result.error === null) {
+        return result.data
+    }
+    // If Redis is temporarily down or unreachable, fail-open (return true) so
+    // scheduled executions are not dropped entirely. While this may cause redundant
+    // executions across replicas during a Redis outage, it guarantees execution liveness.
+    return true
 }
 
 async function syncTriggerSchedule(binding: TriggerBinding): Promise<void> {
     const cronExpr = typeof binding.settings?.cronExpression === 'string' ? binding.settings.cronExpression : null
+    const timezone = typeof binding.settings?.timezone === 'string' ? binding.settings.timezone : 'UTC'
     if (cronExpr) {
+        if (!cronParser.validateCronExpression(cronExpr)) {
+            throw new ActivepiecesError({
+                code: ErrorCode.VALIDATION,
+                params: { message: `Invalid cron expression: ${cronExpr}` },
+            })
+        }
         await scheduler.cron({
             name: `trigger-cron-${binding.id}`,
             cronExpression: cronExpr,
+            timezone,
             fn: async () => {
+                const current = await triggerBindingRepo().findOneBy({ id: binding.id })
+                if (!current || current.status !== TriggerBindingStatus.ENABLED) {
+                    await unsyncTriggerSchedule(binding.id)
+                    return
+                }
+                const isLeader = await claimTriggerTick(binding.id, 'run', cronExpr, timezone)
+                if (!isLeader) {
+                    return
+                }
                 await triggerBindingService.executeRun({ id: binding.id })
             },
         })
@@ -242,13 +308,36 @@ async function syncTriggerSchedule(binding: TriggerBinding): Promise<void> {
 
     const renewCron = typeof binding.settings?.renewCronExpression === 'string' ? binding.settings.renewCronExpression : null
     if (renewCron) {
-        await scheduler.cron({
-            name: `trigger-renew-${binding.id}`,
-            cronExpression: renewCron,
-            fn: async () => {
-                await triggerBindingService.renew({ id: binding.id, projectId: binding.projectId, platformId: binding.platformId })
-            },
-        })
+        if (!cronParser.validateCronExpression(renewCron)) {
+            await scheduler.cancel(`trigger-cron-${binding.id}`)
+            throw new ActivepiecesError({
+                code: ErrorCode.VALIDATION,
+                params: { message: `Invalid renew cron expression: ${renewCron}` },
+            })
+        }
+        try {
+            await scheduler.cron({
+                name: `trigger-renew-${binding.id}`,
+                cronExpression: renewCron,
+                timezone,
+                fn: async () => {
+                    const current = await triggerBindingRepo().findOneBy({ id: binding.id })
+                    if (!current || current.status !== TriggerBindingStatus.ENABLED) {
+                        await unsyncTriggerSchedule(binding.id)
+                        return
+                    }
+                    const isLeader = await claimTriggerTick(binding.id, 'renew', renewCron, timezone)
+                    if (!isLeader) {
+                        return
+                    }
+                    await triggerBindingService.renew({ id: binding.id, projectId: binding.projectId, platformId: binding.platformId })
+                },
+            })
+        }
+        catch (error) {
+            await scheduler.cancel(`trigger-cron-${binding.id}`)
+            throw error
+        }
     }
 }
 

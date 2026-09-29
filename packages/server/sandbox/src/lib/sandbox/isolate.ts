@@ -117,14 +117,17 @@ export function isolateProcess(log: SandboxLogger, enginePath: string, _codeDire
                 // Isolate `--time` enforces cumulative CPU time for the entire lifetime of the
                 // process. Reusable sandboxes execute multiple sequential jobs over the same
                 // process, so a cumulative cap would cause healthy later runs to get SIGKILLed.
-                // Per-execution timeouts are enforced at the application layer; `--time` is only
-                // passed for one-off (non-reusable) sandbox processes.
+                // Per-execution timeouts are enforced at the application layer (sandbox.ts);
+                // `--time` is only passed for one-off (non-reusable) sandbox processes.
                 ...(params.reusable ? [] : [`--time=${resourceLimits.timeLimitSeconds}`]),
                 '--chdir=/root',
                 ...envArgs,
                 '--run',
                 '--',
                 process.execPath,
+                // Keep V8's own heap ceiling at or below the isolate ceiling so
+                // the allocation failure happens inside the sandbox (where we
+                // can report it) rather than as an opaque host OOM.
                 `--max-old-space-size=${resourceLimits.memoryLimitMb}`,
                 engineSandboxPath,
             ]

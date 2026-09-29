@@ -217,14 +217,30 @@ describe('isolateProcess', () => {
             expect(args).toContain('--time=120')
         })
 
+        it('scales the memory flags with the configured limit in KB for isolate and MB for node', async () => {
+            const maker = isolateProcess(createMockLogger(), '/host/cache/common/main.js', '/host/cache/codes', 5)
+            await maker.create({
+                sandboxId: 'sb-mem',
+                command: [],
+                mounts: [],
+                env: BASE_ENV,
+                resourceLimits: { memoryLimitMb: 4096, timeLimitSeconds: 60 },
+            })
+            const args: string[] = spawnMock.mock.calls[0][1]
+            expect(args).toContain('--mem=4194304')
+            expect(args).toContain('--max-old-space-size=4096')
+        })
+
         it('runs node with --max-old-space-size and engine path at /root/common/<basename>', async () => {
             await callCreate({ enginePath: '/any/where/engine-main.js', resourceLimits: { memoryLimitMb: 256, timeLimitSeconds: 60 } })
             const args: string[] = spawnMock.mock.calls[0][1]
-            expect(args[args.length - 3]).toBe(process.execPath)
-            expect(args[args.length - 2]).toBe('--max-old-space-size=256')
+            const runIndex = args.lastIndexOf('--run')
+            expect(runIndex).toBeGreaterThan(-1)
+            expect(args[runIndex + 1]).toBe('--')
+            expect(args[runIndex + 2]).toBe(process.execPath)
+            expect(args).toContain('--max-old-space-size=256')
             expect(args[args.length - 1]).toBe('/root/common/engine-main.js')
-            expect(args[args.length - 4]).toBe('--')
-            expect(args[args.length - 5]).toBe('--run')
+            expect(args.indexOf('--max-old-space-size=256')).toBeGreaterThan(args.indexOf(process.execPath))
         })
 
         it('normalizes Windows backslashes in enginePath to POSIX forward slashes inside isolate', async () => {

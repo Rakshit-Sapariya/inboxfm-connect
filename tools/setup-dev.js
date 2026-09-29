@@ -67,9 +67,12 @@ try {
 
 const devPieces = process.env.AP_DEV_PIECES || envConfig.AP_DEV_PIECES;
 
+const { resolveIntegrationsDir } = require('./lib/resolve-dev-pieces');
+
 if (devPieces) {
   const pieceNames = [...new Set(devPieces.split(',').map(n => n.trim()))];
-  const allFolders = findAllPieceFolders(path.resolve('packages', 'integrations'));
+  const integrationsDir = resolveIntegrationsDir({ cwd: process.cwd(), devPieces });
+  const allFolders = findAllPieceFolders(integrationsDir);
 
   const pieceFilters = pieceNames.map(name => {
     const dir = allFolders.find(p => p.endsWith(path.sep + name));

@@ -214,7 +214,15 @@ async function handleConnection(params: ResolveSingleTokenParams): Promise<unkno
 
 function parsePathAfterConnectionName(variableName: string, connectionName: string): string | null {
     if (variableName.includes('[')) {
-        return variableName.substring(`connections.['${connectionName}']`.length)
+        // The bracket form has no dot before the '[' — `connections['name'].path`.
+        // The path after the name must be rewritten onto the `connection` scope the
+        // evaluator uses (mirroring the dot-form branch below), otherwise `.path`
+        // is dropped and the whole connection object is returned instead.
+        const path = variableName.substring(`connections['${connectionName}']`.length)
+        if (path.length === 0) {
+            return path
+        }
+        return `connection${path}`
     }
     const cp = variableName.substring(`connections.${connectionName}`.length)
     if (cp.length === 0) {

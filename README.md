@@ -47,7 +47,15 @@ Third-party integrations may require an account, credentials, or a paid service.
 
 ## Start locally
 
-Use **Node.js 24** and **Bun 1.3.3** (pinned in `package.json`). Linux, macOS, or WSL2 is recommended for the native dependencies and shell-based test commands. Native dependency builds may require Python and a C/C++ toolchain.
+### Prerequisites
+
+- **Node.js**: `v18.x`, `v22.x`, or `v24.x` (`tools/setup-dev.js` validates compatible versions; Node 20 is not supported).
+- **Bun**: `1.3.3` (required package manager pinned in `package.json`; auto-installed by `tools/setup-dev.js` if missing).
+- **Database**: Zero-setup embedded PostgreSQL powered by **PGlite** (`AP_DB_TYPE=PGLITE` in `.env.dev`). External PostgreSQL >= 14 is supported via `AP_DB_TYPE=POSTGRES`. SQLite is deprecated and auto-migrated to PGLite.
+- **Queue & Cache**: In-memory Redis queue by default (`AP_QUEUE_MODE=MEMORY`, `AP_REDIS_TYPE=MEMORY`). External Redis >= 6.0 supported.
+- **OS**: Linux, macOS, or WSL2 is recommended for native dependencies and shell-based test commands. Native dependency builds may require Python and a C/C++ toolchain.
+
+### Quick Start
 
 ```bash
 git clone https://github.com/Mihir-Rabari/inboxfm-connect.git

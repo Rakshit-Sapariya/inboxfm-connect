@@ -173,6 +173,15 @@ async function setupBaseApp(): Promise<FastifyInstance> {
 
     await app.register(fastifyMultipart, {
         attachFieldsToBody: 'keyValues',
+        // Enforce the upload cap BEFORE the onFile handler buffers the part:
+        // fastify's bodyLimit does not apply to multipart streams, so without
+        // limits.fileSize an oversized part would be fully buffered by
+        // part.toBuffer() before any route-level validation could reject it
+        // (memory-exhaustion DoS — see issue #367). Upstream carries the same cap.
+        limits: {
+            fileSize: fileSizeLimit * 1024 * 1024,
+            files: 5,
+        },
         async onFile(part: MultipartFile) {
             const apFile: ApMultipartFile = {
                 filename: part.filename,
