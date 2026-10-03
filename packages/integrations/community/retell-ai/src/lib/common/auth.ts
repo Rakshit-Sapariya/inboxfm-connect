@@ -23,13 +23,17 @@ export const retellAiAuth = PieceAuth.CustomAuth({
   },
   validate: async ({ auth }) => {
     try {
+      // GET /list-chat was deprecated on 06/15/2026 and removed. Use
+      // POST /v2/list-agents (limit 1) as the auth-validation probe — it is
+      // stable, returns quickly, and a 401 reliably surfaces an invalid key.
       await retellAiApiCall({
-        method: HttpMethod.GET,
-        url: '/list-chat',
+        method: HttpMethod.POST,
+        url: '/v2/list-agents?limit=1',
         auth: {
           type: AppConnectionType.CUSTOM_AUTH,
           props: auth,
         },
+        body: {},
       });
       return { valid: true };
     } catch (e) {

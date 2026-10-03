@@ -150,3 +150,72 @@ describe('agentIdDropdown (Issue #477)', () => {
     });
   });
 });
+
+describe('callIdDropdown — POST /v3/list-calls migration (Issue #477)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const authValue: ConnectionValueForAuthProperty<typeof retellAiAuth> = {
+    type: AppConnectionType.CUSTOM_AUTH,
+    props: { apiKey: 'test_retell_key' },
+  };
+
+  const mockContext: PropertyContext = {
+    server: {
+      apiUrl: 'http://localhost:3000',
+      publicUrl: 'http://localhost:3000',
+      token: 'test_token',
+    },
+    project: {
+      id: 'proj_123',
+      externalId: async (): Promise<string | undefined> => undefined,
+    },
+    flows: {
+      list: async () => ({ data: [], next: null, previous: null }),
+      current: { id: 'flow_1', version: { id: 'ver_1' } },
+    },
+    connections: { get: async () => null },
+  };
+
+  it('calls POST /v3/list-calls and reads from items envelope', async () => {
+    const { callIdDropdown } = await import('./props');
+    const apiSpy = vi.spyOn(clientModule, 'retellAiApiCall').mockResolvedValue({
+      items: [
+        {
+          call_id: 'call_abc',
+          agent_id: 'agent_1',
+          call_status: 'ended',
+          call_type: 'web_call',
+        },
+      ],
+      has_more: false,
+    });
+
+    const result = await callIdDropdown.options({ auth: authValue }, mockContext);
+
+    expect(apiSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: HttpMethod.POST,
+        url: '/v3/list-calls',
+      })
+    );
+    expect(result).toEqual({
+      disabled: false,
+      options: [{ label: 'call_abc (ended - web_call)', value: 'call_abc' }],
+    });
+  });
+
+  it('returns placeholder when no calls returned', async () => {
+    const { callIdDropdown } = await import('./props');
+    vi.spyOn(clientModule, 'retellAiApiCall').mockResolvedValue({ items: [] });
+
+    const result = await callIdDropdown.options({ auth: authValue }, mockContext);
+
+    expect(result).toEqual({
+      disabled: true,
+      options: [],
+      placeholder: 'No calls found in your workspace.',
+    });
+  });
+});

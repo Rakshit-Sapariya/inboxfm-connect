@@ -84,6 +84,14 @@ interface RetellAiCall {
   end_timestamp?: number;
 }
 
+// POST /v3/list-calls returns a paginated envelope (issue #477):
+// v2 returned a bare array; v3 wraps results in { items, pagination_key, has_more }.
+interface RetellAiCallListResponse {
+  items: RetellAiCall[];
+  has_more?: boolean;
+  pagination_key?: string;
+}
+
 interface RetellAiVoice {
   voice_id: string;
   voice_name: string;
@@ -165,17 +173,21 @@ export const callIdDropdown =  Property.Dropdown({
       };
     }
     try {
-      const response = await retellAiApiCall<RetellAiCall[]>({
+      // POST /v2/list-calls was deprecated on 06/15/2026 and removed. Migrated
+      // to POST /v3/list-calls, which returns { items, pagination_key, has_more }
+      // instead of a bare array (issue #477).
+      const response = await retellAiApiCall<RetellAiCallListResponse>({
        auth,
         method: HttpMethod.POST,
-        url: '/v2/list-calls',
+        url: '/v3/list-calls',
         body: {
           limit: 50,
           sort_order: 'descending'
         }
       });
       
-      if (!response || response.length === 0) {
+      const callList = Array.isArray(response?.items) ? response.items : [];
+      if (callList.length === 0) {
         return {
           disabled: true,
           options: [],
@@ -185,7 +197,7 @@ export const callIdDropdown =  Property.Dropdown({
       
       return {
         disabled: false,
-        options: response.map((call) => ({
+        options: callList.map((call) => ({
           label: `${call.call_id} (${call.call_status} - ${call.call_type})`,
           value: call.call_id,
         })),
