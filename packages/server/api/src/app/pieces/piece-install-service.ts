@@ -21,6 +21,12 @@ export const pieceInstallService = (log: FastifyBaseLogger) => ({
                 platformId,
             }, log)
             const archiveId = piecePackage.packageType === PackageType.ARCHIVE ? piecePackage.archiveId : undefined
+            // pieceMetadataService.create() now catches the 23505 unique-violation
+            // from a concurrent race and rethrows it as VALIDATION (issue #475).
+            // Log the orphaned archive here so operators can identify leaked files;
+            // full archive cleanup requires a fileService.deleteByIdAndPlatformId
+            // helper (archive files are scoped by platformId, not projectId, so the
+            // existing fileService.delete(projectId) lookup returns not-found).
             const savedPiece = await pieceMetadataService(log).create({
                 pieceMetadata: {
                     ...pieceInformation,
@@ -36,6 +42,20 @@ export const pieceInstallService = (log: FastifyBaseLogger) => ({
                 platformId,
                 pieceType: PieceType.CUSTOM,
                 archiveId,
+            }).catch((createError) => {
+                if (
+                    createError instanceof ActivepiecesError &&
+                    createError.error.code === ErrorCode.VALIDATION &&
+                    !isNil(archiveId)
+                ) {
+                    // The race-lost archive is now unreachable. Log it for manual cleanup
+                    // until a dedicated archive-GC path is added (issue #475 follow-up).
+                    log.warn(
+                        { archiveId, pieceName: pieceInformation.name, platformId },
+                        '[pieceInstallService#installPiece] Race-lost archive is unreachable — manual cleanup needed',
+                    )
+                }
+                throw createError
             })
             // Reconcile tool-search for this tenant only (async, never blocking the install) so the new
             // custom piece's actions/triggers become searchable. Scoped → the shared catalog is untouched.
@@ -127,4 +147,3 @@ type GetPieceArchivePackageParams = {
     projectId?: ProjectId
     platformId?: PlatformId
 }
-

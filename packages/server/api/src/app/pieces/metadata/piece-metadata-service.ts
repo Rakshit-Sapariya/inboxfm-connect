@@ -140,15 +140,38 @@ export const pieceMetadataService = (log: FastifyBaseLogger) => {
                 name: pieceMetadata.name,
                 platformId,
             })
-            const savedPiece = await pieceRepos().save({
-                id: apId(),
-                packageType,
-                pieceType,
-                archiveId,
-                platformId,
-                created: createdDate,
-                ...pieceMetadata,
-            })
+            let savedPiece: PieceMetadataSchema
+            try {
+                savedPiece = await pieceRepos().save({
+                    id: apId(),
+                    packageType,
+                    pieceType,
+                    archiveId,
+                    platformId,
+                    created: createdDate,
+                    ...pieceMetadata,
+                })
+            }
+            catch (error) {
+                // Two concurrent installs of the same (name, version, platformId) both
+                // pass the existence check above before either insert lands; the loser
+                // hits the unique index. Catch the 23505 here — same two-driver gate as
+                // embed-subdomain / user-invitation — and surface the same VALIDATION
+                // conflict a sequential duplicate gets rather than a raw driver error
+                // wearing ENGINE_OPERATION_FAILURE clothing (issue #475).
+                // Archive cleanup (the loser's uploaded file is now unreachable) is handled
+                // by the caller (pieceInstallService) which holds the platformId needed to
+                // scope the deletion.
+                if (isUniqueViolationError(error)) {
+                    throw new ActivepiecesError({
+                        code: ErrorCode.VALIDATION,
+                        params: {
+                            message: `piece_metadata_already_exists name=${pieceMetadata.name} version=${pieceMetadata.version}`,
+                        },
+                    })
+                }
+                throw error
+            }
             if (publishCacheRefresh) {
                 await pieceCache(log).invalidate()
             }
@@ -515,6 +538,13 @@ function filterRegistry(registry: PieceRegistryEntry[], params: { release: strin
         .filter((piece) => isNil(params.release) || isSupportedRelease(params.release, piece))
 }
 
+// Mirrors the two-driver gate used in embed-subdomain.service.ts and
+// user-invitation.service.ts: pg 8.11.3 sets `error.code`, while
+// @electric-sql/pglite 0.3.x wraps it in `error.driverError.code`.
+function isUniqueViolationError(error: unknown): boolean {
+    const candidate = error as { code?: string, driverError?: { code?: string } } | null | undefined
+    return candidate?.code === '23505' || candidate?.driverError?.code === '23505'
+}
 
 // Types
 
