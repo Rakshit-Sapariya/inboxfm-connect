@@ -1,6 +1,7 @@
 import { ActivepiecesError, apId, ErrorCode, isNil, PlatformId, spreadIfDefined } from '@inboxfm-connect/core-utils'
 import { AiToolAuthConfig, AiToolCapability, AiToolConfigWithoutSensitiveData, CreateAiToolConfigRequest, GetEnabledAiToolsResponse, ResolvedAiTool, UpdateAiToolConfigRequest } from '@inboxfm-connect/shared'
 import { FastifyBaseLogger } from 'fastify'
+import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity'
 import { repoFactory } from '../core/db/repo-factory'
 import { encryptUtils } from '../helper/encryption'
 import { AiToolConfigEntity, AiToolConfigSchema } from './ai-tool-config-entity'
@@ -14,17 +15,31 @@ export const aiToolConfigService = (_log: FastifyBaseLogger) => ({
     },
 
     async upsert(platformId: PlatformId, request: CreateAiToolConfigRequest): Promise<void> {
-        const existing = await aiToolConfigRepo().findOneBy({ platformId, capability: request.capability })
         const encryptedAuth = await encryptUtils.encryptObject(request.auth)
-        await aiToolConfigRepo().save({
-            id: existing?.id ?? apId(),
-            platformId,
-            capability: request.capability,
-            provider: request.provider,
-            auth: encryptedAuth,
-            config: request.config ?? null,
-            enabled: request.enabled ?? true,
-        })
+        // Two concurrent first-time upserts both read `existing = null` before
+        // either insert lands, then the loser hits the unique index on
+        // (platformId, capability) with a raw 500 (issue #473).
+        // Build a single INSERT … ON CONFLICT DO UPDATE so the unique index
+        // itself arbitrates the race atomically — only `provider`, `auth`,
+        // `config`, and `enabled` are overwritten; `id`/`created` are never
+        // rewritten by the conflict clause.
+        await aiToolConfigRepo()
+            .createQueryBuilder()
+            .insert()
+            .values({
+                id: apId(),
+                platformId,
+                capability: request.capability,
+                provider: request.provider,
+                auth: encryptedAuth,
+                config: (request.config ?? null) as unknown as QueryDeepPartialEntity<AiToolConfigSchema>['config'],
+                enabled: request.enabled ?? true,
+            })
+            .orUpdate(
+                ['provider', 'auth', 'config', 'enabled'],
+                ['platformId', 'capability'],
+            )
+            .execute()
     },
 
     async update(platformId: PlatformId, id: string, request: UpdateAiToolConfigRequest): Promise<void> {
