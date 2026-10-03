@@ -32,15 +32,24 @@ export const aiProviderService = (log: FastifyBaseLogger) => ({
             // provider" wall — but only when nothing else is already enabled for chat, so we never
             // create a second chat provider or override an existing BYO choice (see update()).
             const hasChatProvider = await aiProviderRepo().existsBy({ platformId, enabledForChat: true })
-            await aiProviderRepo().save({
-                id: apId(),
-                auth: await encryptUtils.encryptObject({}),
-                config: {},
-                provider: AIProviderName.ACTIVEPIECES,
-                displayName: 'Inboxfm Connect',
-                platformId,
-                enabledForChat: !hasChatProvider,
-            })
+            // Two concurrent first-list calls both pass the existsBy check before either
+            // insert lands, then the loser hits idx_ai_provider_platform_id_provider (23505).
+            // Use INSERT ... ON CONFLICT DO NOTHING so the loser converges silently instead
+            // of surfacing a raw 500 (issue #471). orIgnore() generates DO NOTHING.
+            await aiProviderRepo()
+                .createQueryBuilder()
+                .insert()
+                .values({
+                    id: apId(),
+                    auth: await encryptUtils.encryptObject({}),
+                    config: {},
+                    provider: AIProviderName.ACTIVEPIECES,
+                    displayName: 'Inboxfm Connect',
+                    platformId,
+                    enabledForChat: !hasChatProvider,
+                })
+                .orIgnore()
+                .execute()
         }
         const configuredProviders = await aiProviderRepo().findBy({ platformId })
 
