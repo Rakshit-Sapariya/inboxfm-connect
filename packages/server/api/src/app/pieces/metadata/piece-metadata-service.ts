@@ -143,13 +143,19 @@ export const pieceMetadataService = (log: FastifyBaseLogger) => {
             let savedPiece: PieceMetadataSchema
             try {
                 savedPiece = await pieceRepos().save({
+                    // Spread archive-controlled metadata first so every server-pinned
+                    // column that follows it takes precedence over whatever the engine
+                    // returned. A crafted archive whose metadata() sets e.g.
+                    // platformId: null / pieceType: 'OFFICIAL' would otherwise produce
+                    // a global NULL-platformId catalog row visible to every tenant and
+                    // unremovable through the API (issue #478).
+                    ...pieceMetadata,
                     id: apId(),
                     packageType,
                     pieceType,
                     archiveId,
                     platformId,
                     created: createdDate,
-                    ...pieceMetadata,
                 })
             }
             catch (error) {
