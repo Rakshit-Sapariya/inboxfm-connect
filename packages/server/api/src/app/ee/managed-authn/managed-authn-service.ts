@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { isNil } from '@inboxfm-connect/core-utils'
+import { ActivepiecesError, ErrorCode, isNil } from '@inboxfm-connect/core-utils'
 import { cryptoUtils } from '@inboxfm-connect/server-utils'
 import { AuthenticationResponse, PiecesFilterType, PlatformRole, PrincipalType, Project, ProjectType, User, UserIdentity, UserIdentityProvider } from '@inboxfm-connect/shared'
 import { FastifyBaseLogger } from 'fastify'
@@ -113,6 +113,10 @@ const updateProjectLimits = async ({ platformId, projectId, piecesTags, piecesFi
     }, projectId)
 }
 
+// Race-safe get-or-create for the platform user row.
+// The loser of a concurrent first-login race hits idx_user_platform_id_external_id
+// (SQLSTATE 23505). Catch it, re-read by natural key, and return the winner's row
+// so both callers sign in successfully (issue #469).
 const getOrCreateUser = async (
     params: GetOrCreateUserParams,
     log: FastifyBaseLogger,
@@ -126,15 +130,35 @@ const getOrCreateUser = async (
         return existingUser
     }
     const identity = await getOrCreateUserIdentity(params, log)
-    const user = await userService(log).create({
-        externalId: params.externalUserId,
-        platformId: params.platformId,
-        identityId: identity.id,
-        platformRole: PlatformRole.MEMBER,
-    })
-    return user
+    try {
+        return await userService(log).create({
+            externalId: params.externalUserId,
+            platformId: params.platformId,
+            identityId: identity.id,
+            platformRole: PlatformRole.MEMBER,
+        })
+    }
+    catch (error) {
+        // Two concurrent first logins for the same (platformId, externalUserId)
+        // both passed the existence check; the loser hits the unique index.
+        if (isUniqueViolationError(error)) {
+            log.warn({ platformId: params.platformId, externalId: params.externalUserId }, '[managedAuthn#getOrCreateUser] Lost race on user insert — converging to winner row')
+            const winner = await userService(log).getByPlatformAndExternalId({
+                platformId: params.platformId,
+                externalId: params.externalUserId,
+            })
+            if (!isNil(winner)) {
+                return winner
+            }
+        }
+        throw error
+    }
 }
 
+// Race-safe get-or-create for the user identity row.
+// The loser hits idx_user_identity_email (23505) OR the EXISTING_USER error from
+// userIdentityService.create()'s own pre-check. Both signals mean the winner's
+// row already exists — re-read by email and return it (issue #469).
 const getOrCreateUserIdentity = async (
     params: GetOrCreateUserParams,
     log: FastifyBaseLogger,
@@ -144,18 +168,37 @@ const getOrCreateUserIdentity = async (
     if (!isNil(existingIdentity)) {
         return existingIdentity
     }
-    const identity = await userIdentityService(log).create({
-        email: cleanedEmail,
-        password: await cryptoUtils.generateRandomPassword(),
-        firstName: params.externalFirstName,
-        lastName: params.externalLastName,
-        trackEvents: true,
-        newsLetter: false,
-        provider: UserIdentityProvider.JWT,
-        verified: true,
-    })
-    return identity
+    try {
+        return await userIdentityService(log).create({
+            email: cleanedEmail,
+            password: await cryptoUtils.generateRandomPassword(),
+            firstName: params.externalFirstName,
+            lastName: params.externalLastName,
+            trackEvents: true,
+            newsLetter: false,
+            provider: UserIdentityProvider.JWT,
+            verified: true,
+        })
+    }
+    catch (error) {
+        // 23505 from the DB or EXISTING_USER from the service's own pre-check both
+        // mean the race-winner's row already landed.
+        const isIdentityRaceLoss = isUniqueViolationError(error) ||
+            (error instanceof ActivepiecesError && error.error.code === ErrorCode.EXISTING_USER)
+        if (isIdentityRaceLoss) {
+            log.warn({ email: cleanedEmail }, '[managedAuthn#getOrCreateUserIdentity] Lost race on identity insert — converging to winner row')
+            const winner = await userIdentityService(log).getIdentityByEmail(cleanedEmail)
+            if (!isNil(winner)) {
+                return winner
+            }
+        }
+        throw error
+    }
 }
+
+// Race-safe get-or-create for the project row.
+// The loser hits idx_project_platform_id_external_id (23505) — re-read by the
+// natural key and return the winner's row (issue #469).
 const getOrCreateProject = async ({
     platformId,
     externalProjectId,
@@ -171,15 +214,29 @@ const getOrCreateProject = async ({
 
     const platform = await platformService(log).getOneOrThrow(platformId)
 
-    const project = await projectService(log).create({
-        displayName: externalProjectId,
-        ownerId: platform.ownerId,
-        platformId,
-        externalId: externalProjectId,
-        type: ProjectType.TEAM,
-    })
-
-    return { project, isNewProject: true }
+    try {
+        const project = await projectService(log).create({
+            displayName: externalProjectId,
+            ownerId: platform.ownerId,
+            platformId,
+            externalId: externalProjectId,
+            type: ProjectType.TEAM,
+        })
+        return { project, isNewProject: true }
+    }
+    catch (error) {
+        if (isUniqueViolationError(error)) {
+            log.warn({ platformId, externalProjectId }, '[managedAuthn#getOrCreateProject] Lost race on project insert — converging to winner row')
+            const winner = await projectService(log).getByPlatformIdAndExternalId({
+                platformId,
+                externalId: externalProjectId,
+            })
+            if (!isNil(winner)) {
+                return { project: winner, isNewProject: false }
+            }
+        }
+        throw error
+    }
 }
 
 const getPiecesList = async ({
@@ -198,6 +255,14 @@ const getPiecesList = async ({
             return []
         }
     }
+}
+
+// TypeORM wraps Postgres unique-index violations in a QueryFailedError whose
+// driver-level code is 23505. @electric-sql/pglite surfaces it on driverError.code.
+// Matching on the driver code (not the message) keeps this branch race-loss-only.
+function isUniqueViolationError(error: unknown): boolean {
+    const candidate = error as { code?: string, driverError?: { code?: string } } | null | undefined
+    return candidate?.code === '23505' || candidate?.driverError?.code === '23505'
 }
 
 function generateEmailHash(params: { platformId: string, externalUserId: string }): string {
