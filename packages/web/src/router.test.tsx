@@ -46,13 +46,14 @@ function signInTestUser() {
   }
   apiClient.setToken('mock-token')
   apiClient.setProjectId('prj_test')
-  localStorage.setItem('ap-user', JSON.stringify(mockUser))
+  sessionStorage.setItem('ap-user', JSON.stringify(mockUser))
 }
 
 function signOutTestUser() {
   apiClient.setToken(null)
   apiClient.setProjectId(null)
   localStorage.clear()
+  sessionStorage.clear()
 }
 
 async function navigateAndMount(path: string): Promise<HTMLElement> {
@@ -84,6 +85,7 @@ describe('router', () => {
   beforeEach(() => {
     queryClient.clear()
     localStorage.clear()
+    sessionStorage.clear()
     document.body.innerHTML = ''
     apiClient.setToken('test-token')
     apiClient.setProjectId('proj_default')
