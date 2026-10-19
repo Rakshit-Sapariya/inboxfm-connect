@@ -205,18 +205,24 @@ export const tableImportService = {
 
         try {
             if (unmappedHeaders.length > 0 && autoCreate) {
-                for (const header of unmappedHeaders) {
-                    const columnValues = rawRows.map((r) => r[header])
-                    const inferredType = inferFieldType(columnValues)
-                    const newField = await fieldService.createFromState({
-                        projectId,
-                        tableId: table.id,
-                        field: {
-                            name: header,
-                            type: inferredType,
-                            externalId: apId(),
-                        },
-                    })
+                const newFields = await Promise.all(
+                    unmappedHeaders.map(async (header) => {
+                        const columnValues = rawRows.map((r) => r[header])
+                        const inferredType = inferFieldType(columnValues)
+                        return fieldService.createFromState({
+                            projectId,
+                            tableId: table.id,
+                            field: {
+                                name: header,
+                                type: inferredType,
+                                externalId: apId(),
+                            },
+                        })
+                    }),
+                )
+                for (let i = 0; i < unmappedHeaders.length; i++) {
+                    const header = unmappedHeaders[i]
+                    const newField = newFields[i]
                     resolvedFieldsMap.set(header, newField)
                     createdFields.push({
                         id: newField.id,
