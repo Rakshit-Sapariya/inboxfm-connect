@@ -37,6 +37,7 @@ This file tracks the sequential issues discovered, implemented, tested, audited,
 ### Issue #137: `tests: analytics module (platform analytics reports) is untested`
 - **Status**: Verified / Pushed (`submitted for manual PR creation`)
 - **Branch**: `test/issue-137-platform-analytics-suite`
+- **Commit SHA**: `7f1ea70c4043c5446299399ee3afe9dc1e6bd153`
 - **Comparison URL**: https://github.com/Mihir-Rabari/inboxfm-connect/compare/dev...HenilLol:inboxfm-connect:test/issue-137-platform-analytics-suite?expand=1
 - **Tests**:
   - `platform-analytics.test.ts` (unit): 13 passed (13)
@@ -48,14 +49,11 @@ This file tracks the sequential issues discovered, implemented, tested, audited,
 
 ### Issue #141: `tests: core libs are thin — wire core/execution into test-unit and raise shared/execution coverage`
 - **Status**: Verified / In Review
-- **Branch**: `test/core-execution-and-shared-coverage`
+- **Branch**: `test/issue-141-core-execution-shared-coverage`
 - **Tests**:
-  - `@inboxfm-connect/core-utils`: 3 files, 73 passed (73)
-  - `npm run test-unit`: 23 tasks passed (495 api tests passed)
+  - `@inboxfm-connect/core-execution`: 5 files, 87 passed (87)
+  - `@inboxfm-connect/shared`: 14 files, 441 passed (441)
+  - `npm run test-unit`: 23 tasks passed
   - `turbo run lint`: 0 errors
-- **Coverage**:
-  - `packages/core/utils/vitest.config.ts`: configured coverage thresholds
-  - `packages/core/utils/test/object-utils.test.ts`: 25 tests (sanitizeObjectForPostgresql, omit, spread, deleteProps)
-  - `packages/core/utils/test/utils.test.ts`: 40 tests (chunk, partition, unique, truncateString, isBase64)
-- **Known Limitations**: Yielded overlapping journal/step-output suites to #268 first-mover.
-- **Timestamp**: 2026-10-01T22:38:00+05:30
+- **Known Limitations**: None.
+- **Timestamp**: 2026-10-04T15:50:00+05:30

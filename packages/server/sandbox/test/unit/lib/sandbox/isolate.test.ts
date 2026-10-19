@@ -56,12 +56,14 @@ async function callCreate({
     boxId = 7,
     enginePath = '/host/cache/common/main.js',
     sandboxId = 'sb-abc',
+    reusable,
 }: {
     mounts?: SandboxMount[]
     env?: Record<string, string>
     boxId?: number
     enginePath?: string
     sandboxId?: string
+    reusable?: boolean
 } = {}) {
     const maker = isolateProcess(createMockLogger(), enginePath, '/host/cache/codes', boxId)
     return maker.create({
@@ -69,7 +71,8 @@ async function callCreate({
         command: [],
         mounts,
         env,
-        resourceLimits: { memoryLimitMb: 256, cpuMsPerSec: 1000, timeLimitSeconds: 60 },
+        resourceLimits: { memoryLimitMb: 256, timeLimitSeconds: 60 },
+        reusable,
     })
 }
 
@@ -187,10 +190,12 @@ describe('isolateProcess', () => {
             ])
         })
 
-        it('includes --box-id, --chdir=/root, --processes, --share-net', async () => {
+        it('includes --box-id, --mem, --time, --chdir=/root, --processes, --share-net', async () => {
             await callCreate({ boxId: 42 })
             const args: string[] = spawnMock.mock.calls[0][1]
             expect(args).toContain('--box-id=42')
+            expect(args).toContain('--mem=262144')
+            expect(args).toContain('--time=60')
             expect(args).toContain('--chdir=/root')
             expect(args).toContain('--processes')
             expect(args).toContain('--share-net')
@@ -199,7 +204,7 @@ describe('isolateProcess', () => {
         it('applies the memory ceiling via --mem and --max-old-space-size', async () => {
             await callCreate({ boxId: 42 })
             const args: string[] = spawnMock.mock.calls[0][1]
-            expect(args).toContain('--mem=256')
+            expect(args).toContain('--mem=262144')
             expect(args).toContain('--max-old-space-size=256')
         })
 
@@ -212,7 +217,7 @@ describe('isolateProcess', () => {
             // setTimeout in sandbox.ts#execute, which is the correct place for
             // a per-run budget. Locking the absence so it is not "helpfully"
             // re-added.
-            await callCreate({ boxId: 42 })
+            await callCreate({ boxId: 42, reusable: true })
             const args: string[] = spawnMock.mock.calls[0][1]
             expect(args.some((a) => a.startsWith('--time'))).toBe(false)
         })
@@ -224,10 +229,10 @@ describe('isolateProcess', () => {
                 command: [],
                 mounts: [],
                 env: BASE_ENV,
-                resourceLimits: { memoryLimitMb: 4096, cpuMsPerSec: 1000, timeLimitSeconds: 60 },
+                resourceLimits: { memoryLimitMb: 4096, timeLimitSeconds: 60 },
             })
             const args: string[] = spawnMock.mock.calls[0][1]
-            expect(args).toContain('--mem=4096')
+            expect(args).toContain('--mem=4194304')
             expect(args).toContain('--max-old-space-size=4096')
         })
 

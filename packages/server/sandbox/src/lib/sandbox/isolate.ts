@@ -64,7 +64,7 @@ export function isolateProcess(log: SandboxLogger, enginePath: string, _codeDire
                 assertMountInsideRoot(mount)
             }
 
-            const engineSandboxPath = path.join('/root/common', path.basename(enginePath))
+            const engineSandboxPath = path.posix.join('/root/common', path.basename(enginePath))
             const sandboxEnv = {
                 ...env,
                 AP_BASE_CODE_DIRECTORY: '/root/codes',
@@ -112,18 +112,14 @@ export function isolateProcess(log: SandboxLogger, enginePath: string, _codeDire
                 ...dirArgs,
                 '--share-net',
                 `--box-id=${boxId}`,
+                `--mem=${params.resourceLimits.memoryLimitMb * 1024}`,
+                ...(params.reusable ? [] : [`--time=${params.resourceLimits.timeLimitSeconds}`]),
                 '--processes',
-                // Ceiling, not a countdown. Isolate mode previously applied no
-                // memory limit at all, so a runaway piece could exhaust the host.
-                `--mem=${params.resourceLimits.memoryLimitMb}`,
-                // Deliberately NO `--time` here. Isolate's --time is a wall-clock
-                // limit measured from process start, and it kills the process. A
-                // sandbox is reused when REUSE_SANDBOX=true (and always in
-                // DEVELOPMENT - see canReuseSandbox), so a fixed --time would
-                // tear down a healthy worker mid-execution once it aged past
-                // FLOW_TIMEOUT_SECONDS. The per-execution budget is already
-                // enforced precisely, per run, by the setTimeout in
-                // sandbox.ts#execute using executeOptions.timeoutInSeconds.
+                // Isolate's --time is a wall-clock limit measured from process start,
+                // so for reusable sandboxes (REUSE_SANDBOX=true or DEVELOPMENT mode) it is omitted
+                // to prevent killing a healthy worker mid-execution after total aging. Reusable executions
+                // rely on the per-execution timeout in sandbox.ts, while non-reusable sandboxes receive
+                // the isolate-level --time limit above.
                 '--chdir=/root',
                 ...envArgs,
                 '--run',

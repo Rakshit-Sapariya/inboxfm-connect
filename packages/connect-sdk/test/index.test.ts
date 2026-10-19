@@ -449,3 +449,55 @@ describe('InboxFM.proxy', () => {
     })
 })
 
+describe('InboxFM.createMcpToken', () => {
+    let fetchMock: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+        fetchMock = vi.fn()
+        vi.stubGlobal('fetch', fetchMock)
+    })
+
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it('creates a bounded delegated MCP token for an external user', async () => {
+        const expectedResponse = {
+            token: 'mock-mcp-token',
+            mcpServerUrl: 'https://api.example.com/mcp',
+            expiresAt: '2026-09-28T21:00:00.000Z',
+            projectId: 'project-a',
+            externalUserId: 'cust_abc_123',
+            allowedPieceNames: ['@inboxfm-connect/piece-slack'],
+        }
+        fetchMock.mockResolvedValueOnce(jsonResponse({ status: 201, body: expectedResponse }))
+
+        const result = await client().createMcpToken({
+            externalUserId: 'cust_abc_123',
+            allowedPieceNames: ['@inboxfm-connect/piece-slack'],
+            expiresInSeconds: 3600,
+        })
+
+        expect(result).toEqual(expectedResponse)
+        const [url, init] = fetchMock.mock.calls[0]
+        expect(String(url)).toBe('https://api.example.com/v1/connect-mcp/token')
+        expect(init?.method).toBe('POST')
+        expect(JSON.parse(String(init?.body))).toEqual({
+            projectId: 'project-a',
+            externalUserId: 'cust_abc_123',
+            allowedPieceNames: ['@inboxfm-connect/piece-slack'],
+            expiresInSeconds: 3600,
+        })
+    })
+
+    it('surfaces validation errors as validation ConnectError', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse({
+            status: 400,
+            body: { code: 'VALIDATION', params: { message: 'externalUserId cannot be empty' } },
+        }))
+
+        await expect(client().createMcpToken({ externalUserId: '' })).rejects.toMatchObject({
+            category: 'validation',
+        })
+    })
+})

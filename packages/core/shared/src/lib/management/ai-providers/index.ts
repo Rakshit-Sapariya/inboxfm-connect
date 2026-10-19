@@ -241,6 +241,62 @@ export type AIProviderModel = z.infer<typeof AIProviderModel>
 export const CreateAIProviderRequest = ProviderConfigUnion
 export type CreateAIProviderRequest = z.infer<typeof CreateAIProviderRequest>
 
+const TestProviderConfigUnion = z.discriminatedUnion('provider', [
+    z.object({
+        provider: z.literal(AIProviderName.OPENAI),
+        config: OpenAIProviderConfig,
+        auth: OpenAIProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.OPENROUTER),
+        config: OpenRouterProviderConfig,
+        auth: OpenRouterProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.ANTHROPIC),
+        config: AnthropicProviderConfig,
+        auth: AnthropicProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.AZURE),
+        config: AzureProviderConfig,
+        auth: AzureProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.GOOGLE),
+        config: GoogleProviderConfig,
+        auth: GoogleProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.CLOUDFLARE_GATEWAY),
+        config: CloudflareGatewayProviderConfig,
+        auth: CloudflareGatewayProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.CUSTOM),
+        config: OpenAICompatibleProviderConfig,
+        auth: OpenAICompatibleProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.ACTIVEPIECES),
+        config: ActivePiecesProviderConfig,
+        auth: ActivePiecesProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.BEDROCK),
+        config: BedrockProviderConfig,
+        auth: BedrockProviderAuthConfig,
+    }),
+    z.object({
+        provider: z.literal(AIProviderName.MISTRAL),
+        config: MistralProviderConfig,
+        auth: MistralProviderAuthConfig,
+    }),
+])
+
+export const TestAIProviderRequest = TestProviderConfigUnion
+export type TestAIProviderRequest = z.infer<typeof TestAIProviderRequest>
+
 
 export const UpdateAIProviderRequest = z.object({
     displayName: z.string().min(1),

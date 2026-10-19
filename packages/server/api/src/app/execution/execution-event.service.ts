@@ -21,6 +21,14 @@ function getExecutionSubscriptionMutex(executionId: string): Mutex {
     return mutex
 }
 
+// Critical events must land, but not grow the list without bound (issue #392):
+// make room by dropping the oldest non-critical entry, then the absolute oldest
+// if every survivor is critical.
+function pickEvictionIndex({ events }: { events: ExecutionEvent[] }): number {
+    const oldestNonCritical = events.findIndex((event) => !CRITICAL_EXECUTION_EVENT_TYPES.includes(event.type))
+    return oldestNonCritical === -1 ? 0 : oldestNonCritical
+}
+
 const MAX_HISTORY_EVENTS = 1000
 
 // Memory-fallback eviction (issue #392): the Redis path self-cleans via EXPIRE
@@ -276,22 +284,19 @@ const executionEventService = {
         memoryLastActivity.set(event.executionId, Date.now())
         startMemoryTtlSweep()
 
-        const list = memoryHistory.get(event.executionId) ?? []
-        if (list.length >= MAX_HISTORY_EVENTS) {
+        const stored = memoryHistory.get(event.executionId) ?? []
+        if (stored.length >= MAX_HISTORY_EVENTS) {
             if (!isCritical) {
                 return
             }
-            // Critical events must land, but not grow the list without bound
-            // (issue #392): make room by dropping the oldest non-critical
-            // entry, then the absolute oldest if every survivor is critical.
-            let dropIndex = list.findIndex((e) => !CRITICAL_EXECUTION_EVENT_TYPES.includes(e.type))
-            if (dropIndex === -1) {
-                dropIndex = 0
-            }
-            list.splice(dropIndex, 1)
+            const dropIndex = pickEvictionIndex({ events: stored })
+            memoryHistory.set(event.executionId, [...stored.filter((_, index) => index !== dropIndex), event])
+            return
         }
-        list.push(event)
-        memoryHistory.set(event.executionId, list)
+        // Replace the stored array instead of pushing onto it: readEventHistory hands
+        // snapshots to callers (the SSE backfill), and an in-place push would let a later
+        // emit mutate a snapshot that is still being held or serialized.
+        memoryHistory.set(event.executionId, [...stored, event])
     },
 
     async readEventHistory({ executionId }: { executionId: string }): Promise<ExecutionEvent[]> {
@@ -307,7 +312,12 @@ const executionEventService = {
             // Fallback to memory
         }
 
-        return memoryHistory.get(executionId) ?? []
+        // Hand back a snapshot, never the stored array itself: getEventsSince forwards
+        // this result straight to the SSE backfill, so returning the live reference
+        // would let a concurrent emit mutate a response mid-serialization, and would
+        // let a caller corrupt stored history by mutating what it was given. The
+        // Redis branch above already builds a fresh array per call.
+        return [...(memoryHistory.get(executionId) ?? [])]
     },
 
     parseSequenceFromId({ eventId }: { eventId?: string | null }): number | null {

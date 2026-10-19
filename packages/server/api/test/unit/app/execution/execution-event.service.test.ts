@@ -325,3 +325,68 @@ describe('memory fallback eviction (issue #392)', () => {
         }
     })
 })
+
+describe('memory fallback history isolation', () => {
+    beforeEach(() => {
+        vi.spyOn(redisConnections, 'useExisting').mockRejectedValue(new Error('redis unavailable (test)'))
+    })
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    it('does not let a later emit mutate a snapshot a caller is still holding', async () => {
+        const executionId = 'exec_snapshot_isolation_test'
+        await executionEventService.emit({
+            executionId,
+            type: ExecutionEventType.PlannerStarted,
+            payload: { i: 0 },
+        })
+
+        // getEventsSince with no lastEventId forwards readEventHistory's result
+        // verbatim - this is the array the SSE backfill serializes.
+        const snapshot = await executionEventService.getEventsSince({ executionId })
+        expect(snapshot).toHaveLength(1)
+
+        await executionEventService.emit({
+            executionId,
+            type: ExecutionEventType.ExecutionCompleted,
+            payload: { done: true },
+        })
+
+        // The already-returned snapshot must not grow behind the caller's back.
+        expect(snapshot).toHaveLength(1)
+
+        const fresh = await executionEventService.getEventsSince({ executionId })
+        expect(fresh).toHaveLength(2)
+    })
+
+    it('does not let a caller corrupt stored history by mutating the returned array', async () => {
+        const executionId = 'exec_caller_mutation_test'
+        await executionEventService.emit({
+            executionId,
+            type: ExecutionEventType.PlannerStarted,
+            payload: { i: 0 },
+        })
+
+        const borrowed = await executionEventService.readEventHistory({ executionId })
+        borrowed.length = 0
+
+        const stored = await executionEventService.readEventHistory({ executionId })
+        expect(stored).toHaveLength(1)
+    })
+
+    it('returns a distinct array on every read', async () => {
+        const executionId = 'exec_distinct_snapshot_test'
+        await executionEventService.emit({
+            executionId,
+            type: ExecutionEventType.PlannerStarted,
+            payload: { i: 0 },
+        })
+
+        const first = await executionEventService.readEventHistory({ executionId })
+        const second = await executionEventService.readEventHistory({ executionId })
+
+        expect(first).not.toBe(second)
+    })
+})

@@ -17,12 +17,12 @@ import { appConnectionModule } from './app-connection/app-connection.module'
 import { platformAppConnectionModule } from './app-connection/platform-app-connection.module'
 import { authenticationModule } from './authentication/authentication.module'
 import { connectApiKeyModule } from './connect-api-keys/connect-api-key.module'
+import { connectMcpModule } from './connect-mcp/connect-mcp.module'
 import { connectOAuthAppModule } from './connect-oauth-apps/connect-oauth-app.module'
 import { connectProxyModule } from './connect-proxy/connect-proxy.module'
 import { connectSessionModule } from './connect-sessions/connect-session.module'
 import { oidcModule } from './core/security/oidc/oidc.module'
 import { publicIngressRateLimitMiddleware } from './core/security/public-ingress-rate-limit-middleware'
-import { rateLimitModule } from './core/security/rate-limit'
 import { authenticationMiddleware } from './core/security/v2/authn/authentication-middleware'
 import { apiKeyRateLimitMiddleware } from './core/security/v2/authz/api-key-rate-limit-middleware'
 import { authorizationMiddleware } from './core/security/v2/authz/authorization-middleware'
@@ -143,7 +143,6 @@ export const setupApp = async (app: FastifyInstance): Promise<FastifyInstance> =
     })
 
 
-    await app.register(rateLimitModule)
     app.addHook('onResponse', async (request, reply) => {
         // eslint-disable-next-line                                                                                                                                                                                                                     
         reply.header('x-request-id', request.id)
@@ -224,6 +223,7 @@ export const setupApp = async (app: FastifyInstance): Promise<FastifyInstance> =
     await app.register(connectOAuthAppModule)
     await app.register(connectSessionModule)
     await app.register(connectProxyModule)
+    await app.register(connectMcpModule)
     await app.register(executionModule)
     await app.register(knowledgeSearchModule)
     // await app.register(humanInputModule)
@@ -406,7 +406,11 @@ The application started on ${await domainHelper.getPublicApiUrl({ path: '' })}, 
             `[WARNING]: This is only shows pieces specified in AP_DEV_PIECES ${pieces} environment variable.`,
         )
     }
-    void startDevPieceWatcher(app)
+    // Best-effort dev watcher: a bad AP_DEV_PIECES path (missing pieces folder,
+    // malformed piece package.json) rejects startDevPieceWatcher via
+    // readdir/stat/readFile — an unguarded `void` would turn that into an
+    // unhandledRejection and abort the freshly-booted API process.
+    rejectedPromiseHandler(startDevPieceWatcher(app), app.log)
 }
 
 function extractPlatformId(principal: { platform?: { id?: string } } | null | undefined): string | undefined {

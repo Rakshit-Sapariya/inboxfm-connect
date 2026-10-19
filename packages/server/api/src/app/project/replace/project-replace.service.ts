@@ -36,12 +36,12 @@ import {
 import { FastifyBaseLogger } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
 import semver from 'semver'
-import { ArrayContains } from 'typeorm'
+import { ArrayContains, In } from 'typeorm'
 import { AgentEntity, AgentSchema } from '../../agents/agent.entity'
 import { agentService } from '../../agents/agent.service'
 import { AIProviderEntity, AIProviderSchema } from '../../ai/ai-provider-entity'
 import { appConnectionService } from '../../app-connection/app-connection-service/app-connection-service'
-import { ConnectionEntity } from '../../app-connection/app-connection.entity'
+import { ConnectionEntity, ConnectionSchema } from '../../app-connection/app-connection.entity'
 import { repoFactory } from '../../core/db/repo-factory'
 import { databaseConnection } from '../../database/database-connection'
 import { distributedLock } from '../../database/redis-connections'
@@ -417,6 +417,10 @@ function computePlanSignature(plan: Omit<ProjectReplacePlan, 'signature'>): stri
         destinationStateHash: plan.destinationStateHash,
         preflight: plan.preflight,
         connectionMappings: (plan.connectionMappings ?? []).map(sanitizeMappingForPlan),
+        providerMappings: (plan.providerMappings ?? []).map((pm: ProviderMappingSchema) => ({
+            sourceProvider: pm.sourceProvider,
+            destProvider: pm.destProvider,
+        })),
         changes: plan.changes,
         summary: plan.summary,
     })
@@ -451,17 +455,32 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
         const requiredPiecesMap = new Map<string, string>()
         const requiredConnectionsMap = new Map<string, string>()
 
+        // One batched lookup for every referenced connection instead of one
+        // findOne per binding: identical filters (platform + project membership),
+        // identical results - ids are the primary key, so In() returns each
+        // referenced connection at most once - in a single round trip.
+        const referencedConnectionIds = Array.from(new Set(
+            triggerBindings.map((tb) => tb.connectionId).filter((id): id is string => id != null),
+        ))
+        const connectionsById = new Map<string, ConnectionSchema>()
+        if (referencedConnectionIds.length > 0) {
+            const connections = await connectionRepo().find({
+                where: {
+                    id: In(referencedConnectionIds),
+                    platformId,
+                    projectIds: ArrayContains([projectId]),
+                },
+            })
+            for (const conn of connections) {
+                connectionsById.set(conn.id, conn)
+            }
+        }
+
         for (const tb of triggerBindings) {
             requiredPiecesMap.set(`${tb.pieceName}::${tb.pieceVersion}`, tb.pieceVersion)
             let connExternalId: string | null = null
             if (tb.connectionId) {
-                const conn = await connectionRepo().findOne({
-                    where: {
-                        id: tb.connectionId,
-                        platformId,
-                        projectIds: ArrayContains([projectId]),
-                    },
-                })
+                const conn = connectionsById.get(tb.connectionId)
                 if (conn && conn.externalId) {
                     connExternalId = conn.externalId
                     requiredConnectionsMap.set(conn.externalId, conn.pieceName)
@@ -683,9 +702,17 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
 
     async computeDestinationStateHash(projectId: string, platformId?: string): Promise<string> {
         const tables = await tableRepo().find({ where: { projectId } })
+        // One batched fields query instead of one getAll per table:
+        // getAllByTableIds orders each table's fields by position ASC exactly
+        // like getAll, and the hash sorts the mapped fields by externalId
+        // afterwards, so the normalized state is byte-identical.
+        const fieldsByTable = await fieldService.getAllByTableIds({
+            projectId,
+            tableIds: tables.map((t) => t.id),
+        })
         const tablesWithFields = []
         for (const t of tables) {
-            const fields: Field[] = await fieldService.getAll({ projectId, tableId: t.id })
+            const fields: Field[] = fieldsByTable.get(t.id) ?? []
             tablesWithFields.push({
                 name: t.name,
                 externalId: t.externalId,
@@ -1587,6 +1614,10 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
                 connections: connectionsReport,
             },
             connectionMappings: (connectionMappings ?? []).map(sanitizeMappingForPlan),
+            providerMappings: (providerMappings ?? []).map((pm: ProviderMappingSchema) => ({
+                sourceProvider: pm.sourceProvider,
+                destProvider: pm.destProvider,
+            })),
             changes: {
                 creates,
                 updates,
@@ -1650,6 +1681,7 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
             destinationStateHash: plan.destinationStateHash,
             preflight: plan.preflight,
             connectionMappings: plan.connectionMappings,
+            providerMappings: plan.providerMappings,
             changes: plan.changes,
             summary: plan.summary,
         }
@@ -2179,6 +2211,25 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
                     }
                 }
 
+                // Provider remaps used to be dropped from the artifact, so an apply driven by
+                // `--plan-file` had no way to know a remap was ever requested and fell through
+                // to `?? rawProvider` - silently writing destination agents against the SOURCE
+                // provider and reporting success (#502). They are now signed into the plan, so
+                // this map is authoritative and cannot be edited without breaking the HMAC.
+                const planProviderMap = new Map<string, string>()
+                for (const pm of plan.providerMappings ?? []) {
+                    planProviderMap.set(pm.sourceProvider.toLowerCase(), pm.destProvider)
+                }
+
+                // Request-time mappings override the artifact, so an operator can still change
+                // the destination at apply time. The artifact is the fallback. Falling through
+                // to the raw provider is correct here: it means nothing ever remapped that
+                // provider, which is the common case and must keep applying unchanged.
+                const resolveTargetProvider = (rawProvider: string): string => {
+                    const key = rawProvider.toLowerCase()
+                    return providerMap.get(key) ?? planProviderMap.get(key) ?? rawProvider
+                }
+
                 const effectiveAgents: AgentSnapshotSchema[] = [...(snapshot.agents ?? [])]
                 if (snapshot.flows && snapshot.flows.length > 0) {
                     const flowAgents = extractAgentsFromFlows(snapshot.flows)
@@ -2194,7 +2245,7 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
                         const srcAgent = effectiveAgents.find((a) => a.externalId === change.externalId)
                         if (srcAgent) {
                             const rawProvider = srcAgent.model.provider
-                            const targetProvider = providerMap.get(rawProvider.toLowerCase()) ?? rawProvider
+                            const targetProvider = resolveTargetProvider(rawProvider)
 
                             const mappedTools = remapAgentTools(srcAgent.tools, resolvedConnections, request.connectionMappings)
 
@@ -2233,7 +2284,7 @@ export const projectReplaceService = (log: FastifyBaseLogger) => ({
                         }
 
                         const rawProvider = srcAgent.model.provider
-                        const targetProvider = providerMap.get(rawProvider.toLowerCase()) ?? rawProvider
+                        const targetProvider = resolveTargetProvider(rawProvider)
 
                         const mappedTools = remapAgentTools(srcAgent.tools, resolvedConnections, request.connectionMappings, existing.tools)
 

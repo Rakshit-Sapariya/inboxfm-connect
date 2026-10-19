@@ -1,5 +1,5 @@
 import { AIProviderName } from '@inboxfm-connect/core-utils'
-import { AIProviderModel, CreateAIProviderRequest, PrincipalType, UpdateAIProviderRequest } from '@inboxfm-connect/shared'
+import { AIProviderModel, CreateAIProviderRequest, PrincipalType, TestAIProviderRequest, UpdateAIProviderRequest } from '@inboxfm-connect/shared'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { StatusCodes } from 'http-status-codes'
 import { z } from 'zod'
@@ -23,6 +23,14 @@ export const aiProviderController: FastifyPluginAsyncZod = async (app) => {
     app.post('/', CreateAIProvider, async (request) => {
         const platformId = request.principal.platform.id
         return aiProviderService(app.log).create(platformId, request.body)
+    })
+    app.post('/test', TestAIProvider, async (request) => {
+        await aiProviderService(app.log).validateProviderCredentials(
+            request.body.provider,
+            request.body.auth,
+            request.body.config,
+        )
+        return { valid: true }
     })
     app.post('/:id', UpdateAIProvider, async (request) => {
         const platformId = request.principal.platform.id
@@ -76,6 +84,21 @@ const CreateAIProvider = {
     },
     schema: {
         body: CreateAIProviderRequest,
+    },
+}
+
+const TestAIProvider = {
+    config: {
+        security: securityAccess.platformAdminOnly([PrincipalType.USER]),
+        rateLimit: syncExecutionRateLimitOptions,
+    },
+    schema: {
+        body: TestAIProviderRequest,
+        response: {
+            [StatusCodes.OK]: z.object({
+                valid: z.boolean(),
+            }),
+        },
     },
 }
 

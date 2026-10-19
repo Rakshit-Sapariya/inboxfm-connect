@@ -1,3 +1,5 @@
+import { navigateToLogin } from '../auth/auth-navigation'
+
 export class ApiClientError extends Error {
   constructor(
     public readonly statusCode: number,
@@ -17,6 +19,8 @@ export class ApiClient {
   private baseUrl = '/api/v1'
   private token: string | null = null
   private projectId: string | null = null
+  private redirectingFromPath: string | null = null
+  private onUnauthorized: (() => void) | null = null
 
   constructor() {
     // The session token is a 7-day JWT — the account's full credential — so it
@@ -58,6 +62,54 @@ export class ApiClient {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('ap-token')
       localStorage.removeItem('ap-project-id')
+    }
+  }
+
+  setOnUnauthorized(handler: (() => void) | null): void {
+    this.onUnauthorized = handler
+  }
+
+  resetRedirectState(): void {
+    this.redirectingFromPath = null
+  }
+
+  handleUnauthorized(): void {
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+    // The guard is keyed on the route that triggered it instead of a timer, so it
+    // goes inert by itself once the app navigates away and needs no cleanup. A
+    // burst of 401s raised from the page we are still on is absorbed; a 401 from
+    // any other route is free to redirect again. (A fixed timer left a window
+    // where a later 401, still on the same page, started a second redirect.)
+    if (this.redirectingFromPath === currentPath) {
+      return
+    }
+
+    if (currentPath.startsWith('/login')) {
+      return
+    }
+
+    this.redirectingFromPath = currentPath
+    this.setToken(null)
+    this.setProjectId(null)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('ap-user')
+    }
+
+    if (this.onUnauthorized) {
+      try {
+        this.onUnauthorized()
+      } catch {
+        // guard against listener errors
+      }
+    }
+
+    try {
+      navigateToLogin()
+    } catch (error) {
+      // A navigation that throws must not leave the guard latched forever, or the
+      // user is stranded on an unauthenticated page with no way back to login.
+      this.redirectingFromPath = null
+      throw error
     }
   }
 
@@ -165,6 +217,9 @@ export class ApiClient {
     }
 
     if (!response.ok) {
+      if (response.status === 401 && !path.includes('/authentication/sign-in')) {
+        this.handleUnauthorized()
+      }
       const errorMessage =
         (responseData as { message?: string })?.message ||
         `Request failed with status ${response.status}`

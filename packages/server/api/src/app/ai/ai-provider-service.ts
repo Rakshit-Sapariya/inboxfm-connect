@@ -4,6 +4,7 @@ import { ActivePiecesProviderAuthConfig, AIProviderAuthConfig, AIProviderConfig,
 import { FastifyBaseLogger } from 'fastify'
 import cron from 'node-cron'
 import { repoFactory } from '../core/db/repo-factory'
+import { distributedLock } from '../database/redis-connections'
 import { flagService } from '../flags/flag.service'
 import { encryptUtils } from '../helper/encryption'
 import { AIProviderEntity, AIProviderSchema } from './ai-provider-entity'
@@ -28,18 +29,44 @@ export const aiProviderService = (log: FastifyBaseLogger) => ({
         })
 
         if (flagService(log).aiCreditsEnabled() && !activepiecesExists) {
-            // Managed AI is the default chat provider so the chat page skips the "set up a
-            // provider" wall — but only when nothing else is already enabled for chat, so we never
-            // create a second chat provider or override an existing BYO choice (see update()).
-            const hasChatProvider = await aiProviderRepo().existsBy({ platformId, enabledForChat: true })
-            await aiProviderRepo().save({
-                id: apId(),
-                auth: await encryptUtils.encryptObject({}),
-                config: {},
-                provider: AIProviderName.ACTIVEPIECES,
-                displayName: 'Inboxfm Connect',
+            await runProvisionExclusiveOrWithoutLock({
                 platformId,
-                enabledForChat: !hasChatProvider,
+                log,
+                fn: async () => {
+                    const activepiecesExists = await aiProviderRepo().existsBy({
+                        platformId,
+                        provider: AIProviderName.ACTIVEPIECES,
+                    })
+                    if (activepiecesExists) {
+                        return
+                    }
+                    // Managed AI is the default chat provider so the chat page skips the "set up a
+                    // provider" wall — but only when nothing else is already enabled for chat, so we never
+                    // create a second chat provider or override an existing BYO choice (see update()).
+                    const hasChatProvider = await aiProviderRepo().existsBy({ platformId, enabledForChat: true })
+                    try {
+                        await aiProviderRepo().save({
+                            id: apId(),
+                            auth: await encryptUtils.encryptObject({}),
+                            config: {},
+                            provider: AIProviderName.ACTIVEPIECES,
+                            displayName: 'Inboxfm Connect',
+                            platformId,
+                            enabledForChat: !hasChatProvider,
+                        })
+                    }
+                    catch (error) {
+                        // Two concurrent first list calls both pass the outer
+                        // existsBy check before either insert lands; the loser
+                        // hits the (platformId, provider) unique index. That is
+                        // a lost race, not a failure - the winner already
+                        // created the row this call wanted to exist.
+                        if (isUniqueConstraintViolation(error)) {
+                            return
+                        }
+                        throw error
+                    }
+                },
             })
         }
         const configuredProviders = await aiProviderRepo().findBy({ platformId })
@@ -125,9 +152,15 @@ export const aiProviderService = (log: FastifyBaseLogger) => ({
 
         if (aiProvider.provider === AIProviderName.ACTIVEPIECES) {
             if (request.enabledForChat === true) {
-                await aiProviderRepo().manager.transaction(async (manager) => {
-                    await manager.update(AIProviderEntity, { platformId }, { enabledForChat: false })
-                    await manager.update(AIProviderEntity, providerId, { enabledForChat: true })
+                await runProvisionExclusiveOrWithoutLock({
+                    platformId,
+                    log,
+                    fn: async () => {
+                        await aiProviderRepo().manager.transaction(async (manager) => {
+                            await manager.update(AIProviderEntity, { platformId }, { enabledForChat: false })
+                            await manager.update(AIProviderEntity, providerId, { enabledForChat: true })
+                        })
+                    },
                 })
             }
             return
@@ -151,9 +184,15 @@ export const aiProviderService = (log: FastifyBaseLogger) => ({
         }
 
         if (request.enabledForChat === true) {
-            await aiProviderRepo().manager.transaction(async (manager) => {
-                await manager.update(AIProviderEntity, { platformId }, { enabledForChat: false })
-                await manager.update(AIProviderEntity, providerId, updates)
+            await runProvisionExclusiveOrWithoutLock({
+                platformId,
+                log,
+                fn: async () => {
+                    await aiProviderRepo().manager.transaction(async (manager) => {
+                        await manager.update(AIProviderEntity, { platformId }, { enabledForChat: false })
+                        await manager.update(AIProviderEntity, providerId, updates)
+                    })
+                },
             })
         }
         else {
@@ -220,6 +259,66 @@ export const aiProviderService = (log: FastifyBaseLogger) => ({
     },
 
 })
+
+
+// The managed-AI auto-create inside listProviders is a find-then-create on the
+// unique index (platformId, provider) that runs on a plain GET route. Two
+// concurrent first list calls race the SELECT-then-INSERT gap and the loser
+// surfaces a raw QueryFailedError (500) from a read endpoint. Serializing the
+// whole check-then-insert on a per-platform key removes the race in-process
+// and cross-process (Redis-backed lock); the fail-open path keeps the list
+// working when the lock infrastructure itself is unavailable.
+//
+// The same lock also serializes the auto-create against update()'s
+// enabledForChat assignment: the auto-create reads hasChatProvider and then
+// inserts with enabledForChat when no chat provider exists, while update()
+// flips every provider off and the chosen one on inside a transaction. Without
+// a shared lock the two interleave and leave TWO providers enabled for chat,
+// breaking the never-create-a-second-chat-provider invariant. update() takes
+// this lock around ONLY its chat-assignment transaction - the credential
+// validation (a slow upstream HTTP call) runs before the lock is acquired.
+async function runProvisionExclusiveOrWithoutLock({ platformId, fn, log }: {
+    platformId: PlatformId
+    fn: () => Promise<void>
+    log: FastifyBaseLogger
+}): Promise<void> {
+    const key = ['ai-provider', 'provision', platformId].join(':')
+    let fnSettled = false
+    try {
+        await distributedLock(log).runExclusive({
+            key,
+            timeoutInSeconds: 60,
+            fn: async () => {
+                try {
+                    await fn()
+                }
+                finally {
+                    // Mark settled on EVERY exit path (throw AND success) so a
+                    // lock-infra error after a successful fn cannot fail open and
+                    // run fn a second time.
+                    fnSettled = true
+                }
+            },
+        })
+    }
+    catch (error) {
+        if (fnSettled) {
+            throw error
+        }
+        log.warn({ error, lockKey: key }, 'AI provider list auto-create lock unavailable - failing open')
+        await fn()
+    }
+}
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+    // Postgres unique-violation driver code (SQLSTATE 23505), gated on the driver
+    // code the same way as the approved #460/#466/#470 helpers: the two drivers
+    // pinned in this repo (pg 8.11.3, @electric-sql/pglite 0.3.14) do not always
+    // surface the code on the same property, so match both the top-level error
+    // and the wrapped driverError. Any other failure must propagate raw.
+    const candidate = error as { code?: string, driverError?: { code?: string } } | null | undefined
+    return candidate?.code === '23505' || candidate?.driverError?.code === '23505'
+}
 
 type GetOrCreateActivepiecesConfigResponse = {
     platformId: PlatformId

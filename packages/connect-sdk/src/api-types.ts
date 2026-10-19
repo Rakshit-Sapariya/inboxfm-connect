@@ -58,3 +58,19 @@ export type ConnectProxyResponse = {
         reset?: number
     }
 }
+
+export type CreateMcpTokenRequestContract = {
+    projectId: string
+    externalUserId: string
+    allowedPieceNames?: string[]
+    expiresInSeconds?: number
+}
+
+export type CreateMcpTokenResponseContract = {
+    token: string
+    mcpServerUrl: string
+    expiresAt: string
+    projectId: string
+    externalUserId: string
+    allowedPieceNames: string[] | null
+}

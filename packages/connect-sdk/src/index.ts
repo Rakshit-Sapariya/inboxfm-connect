@@ -1,4 +1,15 @@
-import type { ConnectionsPage, CreateConnectSessionResponseContract, ExecuteRequestContract, IntegrationToolsResponse, ListConnectionsQueryContract, Tool, ToolContract, ToolInput, ToolInputContract } from './api-types'
+import type {
+    ConnectionsPage,
+    CreateConnectSessionResponseContract,
+    CreateMcpTokenResponseContract,
+    ExecuteRequestContract,
+    IntegrationToolsResponse,
+    ListConnectionsQueryContract,
+    Tool,
+    ToolContract,
+    ToolInput,
+    ToolInputContract,
+} from './api-types'
 import { ConnectError } from './errors'
 import { transport } from './transport'
 
@@ -28,6 +39,19 @@ export class InboxFM {
 
     async createConnectSession({ externalUserId, allowedPieceNames, expiresInSeconds, ...requestOptions }: CreateConnectSessionParams): Promise<CreateConnectSessionResult> {
         return this.request<CreateConnectSessionResult>('/v1/connect-sessions', {
+            method: 'POST',
+            body: {
+                projectId: this.projectId,
+                externalUserId,
+                allowedPieceNames,
+                expiresInSeconds,
+            },
+            ...requestOptions,
+        })
+    }
+
+    async createMcpToken({ externalUserId, allowedPieceNames, expiresInSeconds, ...requestOptions }: CreateMcpTokenParams): Promise<CreateMcpTokenResult> {
+        return this.request<CreateMcpTokenResult>('/v1/connect-mcp/token', {
             method: 'POST',
             body: {
                 projectId: this.projectId,
@@ -192,6 +216,14 @@ export type CreateConnectSessionParams = {
 } & ConnectRequestOptions
 
 export type CreateConnectSessionResult = CreateConnectSessionResponseContract
+
+export type CreateMcpTokenParams = {
+    externalUserId: string
+    allowedPieceNames?: string[]
+    expiresInSeconds?: number
+} & ConnectRequestOptions
+
+export type CreateMcpTokenResult = CreateMcpTokenResponseContract
 
 export type ListConnectionsParams = {
     externalUserId: string

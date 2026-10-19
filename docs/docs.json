@@ -109,7 +109,8 @@
                   "pages": [
                      "connect-sdk/overview",
                      "connect-sdk/reference",
-                     "connect-sdk/api-proxy"
+                     "connect-sdk/api-proxy",
+                     "connect-sdk/mcp-delegation"
                   ]
                },
                {

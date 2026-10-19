@@ -17,10 +17,10 @@ services:
       retries: 5
       start_period: 5s
     networks:
-      - activepieces
+      - inboxfm-connect
   app:
     image: inboxfm-connect:local
-    container_name: activepieces-app
+    container_name: inboxfm-connect-app
     restart: unless-stopped
     expose:
       - '80'
@@ -45,11 +45,55 @@ services:
     volumes:
       - ./cache:/usr/src/app/cache
     networks:
-      - activepieces
+      - inboxfm-connect
     build:
       context: .
       dockerfile: Dockerfile
       target: run
+  flowscript:
+    image: inboxfm-flowscript:local
+    container_name: inboxfm-flowscript
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - '8081'
+    environment:
+      - FLOWSCRIPT_HOST=0.0.0.0
+      - FLOWSCRIPT_PORT=8081
+      - FLOWSCRIPT_LOG_LEVEL=info
+      - AP_POSTGRES_HOST=postgres
+      - AP_POSTGRES_PORT=5432
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - inboxfm-connect
+    build:
+      context: ./services/flowscript
+      dockerfile: Dockerfile
+  flowscript-worker:
+    image: inboxfm-flowscript:local
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    env_file: .env
+    environment:
+      - AP_POSTGRES_HOST=postgres
+      - AP_POSTGRES_PORT=5432
+      - FLOWSCRIPT_DB_POOL_SIZE=5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inboxfm-connect
+    build:
+      context: ./services/flowscript
+      dockerfile: Dockerfile
   worker:
     image: inboxfm-connect:local
     # container_name is incompatible with deploy.replicas (a fixed name cannot
@@ -65,7 +109,7 @@ services:
     volumes:
       - ./cache:/usr/src/app/cache
     networks:
-      - activepieces
+      - inboxfm-connect
   postgres:
     image: 'pgvector/pgvector:0.8.0-pg14'
     container_name: postgres
@@ -75,10 +119,16 @@ services:
       - 'POSTGRES_DB=${AP_POSTGRES_DATABASE}'
       - 'POSTGRES_PASSWORD=${AP_POSTGRES_PASSWORD}'
       - 'POSTGRES_USER=${AP_POSTGRES_USERNAME}'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AP_POSTGRES_USERNAME} -d ${AP_POSTGRES_DATABASE}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - activepieces
+      - inboxfm-connect
   redis:
     image: 'redis:7.0.7'
     container_name: redis
@@ -86,9 +136,9 @@ services:
     volumes:
       - 'redis_data:/data'
     networks:
-      - activepieces
+      - inboxfm-connect
 volumes:
   postgres_data:
   redis_data:
 networks:
-  activepieces:
+  inboxfm-connect:
